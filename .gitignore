@@ -2,3 +2,4 @@
 forecasting
 .env
 *.csv
+.DS_Store
