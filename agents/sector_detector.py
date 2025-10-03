@@ -4,18 +4,13 @@ from typing import List, Optional
 @dataclass
 class SectorConfig:
     sectors: List[str] = (
-        "Retail",
-        "Finance",
-        "Healthcare",
-        "Manufacturing",
-        "Nature",
-        "Energy",
-        "Transportation",
+        "Retail","Finance","Healthcare",
+        "Manufacturing","Nature","Energy","Transportation"
     )
     model: Optional[str] = None
     temperature: float = 0.0
-    max_tokens: int = 5
-    fallback: str = "Energy"   # used if the model gives something invalid
+    max_tokens: int = 2
+    fallback: str = "Undetected"   # used if the model gives something invalid
 
 
 class SectorDetector:
@@ -25,27 +20,20 @@ class SectorDetector:
     def classify(self, adapter, query: str) -> str:
         """
         Classify a query into exactly one sector word.
-
-        Parameters
-        ----------
-        adapter : object
-            Your LLM client with a .chat(messages, temperature, max_tokens, model_override) method.
-        query : str
-            The user's query.
-
-        Returns
-        -------
-        str
-            One of the sectors defined in cfg.sectors.
         """
         # 1) Build prompt
-        system = (
-            "Classify the user's query into exactly one sector. "
-            "Reply with ONLY one word, chosen from this list:\n"
-            f"{', '.join(self.cfg.sectors)}\n"
-            "No punctuation. No sentences. No JSON. Only the single sector word."
+        system =(
+            "You are a a deterministic multiclass classifier.\n"
+            f"Given a query output EXACTLY one word from the allowed list: {', '.join(self.cfg.sectors)}.\n"
+            "Rules:\n"
+            "1) No punctuation, no quotes, no explanations, no JSON.\n"
+            "2) If uncertain, choose the single best fit; if nothing fits, output Undetected.\n"
         )
-        user = f"Query: {query}"
+        user = (
+            "Classify the following query into exactly ONE category from the allowed list.\n"
+            f"Query: {query}\n"
+            "Answer with only the single category word."
+        )
 
         messages = [
             {"role": "system", "content": system},

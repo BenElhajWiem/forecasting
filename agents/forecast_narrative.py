@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 import json
 import pandas as pd
@@ -9,22 +9,22 @@ import pandas as pd
 # -------------------------
 @dataclass
 class ForecastConfig:
-    model: str = None
-    temperature: float = 0.2
-    max_tokens: int = None
+    model: Optional[str] = None
+    temperature: float = 0.0
+    max_tokens: Optional[int] = None
     tz: str = "Australia/Sydney"
     model_override: Optional[str] = None
-    enforce_unique_timestamps: bool = True   # de-duplicate or nudge duplicates
-    units_map: Dict[str, str] = None
-
-    def __post_init__(self):
-        if self.units_map is None:
-            self.units_map = {"TOTALDEMAND": "MW", "RRP": "$/MWh"}
+    enforce_unique_timestamps: bool = True  # kept for future use
+    units_map: Dict[str, str] = field(default_factory=lambda: {
+        "TOTALDEMAND": "MW",
+        "RRP": "$/MWh",
+    })
 
 # -------------------------
 # Helpers
 # -------------------------
 def _cap_text(obj: Any, max_chars: int = 15000) -> str:
+    """Stringify and cap long evidence blocks to keep prompts compact."""
     try:
         s = obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False, default=str)
     except Exception:
@@ -34,7 +34,9 @@ def _cap_text(obj: Any, max_chars: int = 15000) -> str:
         return s[:keep] + f"\n...[truncated {len(s)-keep} chars]..."
     return s
 
+
 def _tzify(ts_like: Any, tz: str) -> Optional[pd.Timestamp]:
+    """Parse to Timestamp and ensure timezone; returns None on failure/empty."""
     if ts_like in (None, "", "null"):
         return None
     try:
@@ -44,12 +46,15 @@ def _tzify(ts_like: Any, tz: str) -> Optional[pd.Timestamp]:
         return None
 
 def _derive_targets_from_filters(filters: Dict[str, Any], tz: str) -> Dict[str, Any]:
-    regs = [str(r).upper() for r in (filters.get("regions") or [])]
-    mets = [str(m).upper() for m in (filters.get("metrics") or [])]
+    """Normalize regions/metrics/freq and build a readable window label."""
+    regs = [str(r).upper() for r in (filters.get("regions") or [])] or []
+    mets = [str(m).upper() for m in (filters.get("metrics") or [])] or []
     freq = (filters.get("freq") or "").strip() or None
 
     start = _tzify(filters.get("start"), tz)
     end   = _tzify(filters.get("end"), tz)
+
+    # Allow (date_start,date_end) + times as fallback
     if start is None and end is None:
         ds = _tzify(filters.get("date_start"), tz)
         de = _tzify(filters.get("date_end"), tz)
@@ -57,7 +62,8 @@ def _derive_targets_from_filters(filters: Dict[str, Any], tz: str) -> Dict[str, 
         t0 = None
         if times:
             tstr = str(times[0])
-            if len(tstr) == 5: tstr += ":00"
+            if len(tstr) == 5:  # "HH:MM" -> add seconds
+                tstr += ":00"
             try:
                 hh, mm, ss = [int(x) for x in tstr.split(":")]
                 t0 = (hh, mm, ss)
@@ -68,105 +74,86 @@ def _derive_targets_from_filters(filters: Dict[str, Any], tz: str) -> Dict[str, 
         if de is not None:
             end = de.replace(hour=t0[0], minute=t0[1], second=t0[2]) if t0 else de
 
+    def _fmt(ts: Optional[pd.Timestamp]) -> Optional[str]:
+        return ts.strftime("%Y-%m-%d %H:%M") if ts is not None else None
+
     if start and end:
-        win = f"{start.strftime('%Y-%m-%d %H:%M')} → {end.strftime('%Y-%m-%d %H:%M')} ({freq or 'unspecified'})"
+        win = f"{_fmt(start)} → {_fmt(end)} ({freq or 'unspecified'})"
     elif start and not end:
-        win = f"{start.strftime('%Y-%m-%d %H:%M')} (single anchor; {freq or 'unspecified'})"
+        win = f"{_fmt(start)} (single anchor; {freq or 'unspecified'})"
     elif end and not start:
-        win = f"up to {end.strftime('%Y-%m-%d %H:%M')} ({freq or 'unspecified'})"
+        win = f"up to {_fmt(end)} ({freq or 'unspecified'})"
     else:
         win = f"forward horizon at {freq or 'default cadence'} from the latest available point"
 
     return {"regions": regs, "metrics": mets, "freq": freq, "window_text": win}
 
+def _render_units_lines(metrics: List[str], units_map: Dict[str, str]) -> str:
+    """One unit per line for readability in the prompt."""
+    if not metrics:
+        metrics = ["TOTALDEMAND", "RRP"]
+    return "\n".join([f"- {m}: {units_map.get(m, '')}" for m in metrics])
+
 def _format_targets_header(tgt: Dict[str, Any], route: Optional[str]) -> str:
+    regions = tgt["regions"] or ["UNKNOWN-REGION"]
+    metrics = tgt["metrics"] or ["TOTALDEMAND", "RRP"]
     return (
         "TARGETS (from filters)\n"
-        f"- Regions: {', '.join(tgt['regions'] or ['UNKNOWN-REGION'])}\n"
-        f"- Metrics: {', '.join(tgt['metrics'] or ['TOTALDEMAND','RRP'])}\n"
+        f"- Regions: {', '.join(regions)}\n"
+        f"- Metrics: {', '.join(metrics)}\n"
         f"- Window:  {tgt['window_text']}\n"
         f"- Route hint: {route or 'unspecified'}\n"
         f"- Freq: {tgt['freq'] or 'unspecified'}\n"
         "- Context slices: recent_window, same_hour_previous_days, prior_years_same_dates/week, same_woy_prior_years"
     )
 
-def _nudge_duplicate_timestamps(obj: Dict[str, Any]) -> Dict[str, Any]:
-    """If model repeats exact timestamps, slightly nudge seconds to ensure uniqueness."""
-    for mkey, arr in (obj.get("metrics") or {}).items():
-        seen = {}
-        new_arr = []
-        for item in arr:
-            ts = item.get("timestamp")
-            if not ts:
-                new_arr.append(item); continue
-            if ts not in seen:
-                seen[ts] = 0
-                new_arr.append(item)
-            else:
-                seen[ts] += 1
-                try:
-                    t = pd.Timestamp(ts)
-                    t = t + pd.Timedelta(seconds=seen[ts])  # +1s, +2s, ...
-                    item2 = dict(item); item2["timestamp"] = t.isoformat()
-                    new_arr.append(item2)
-                except Exception:
-                    # fallback: append suffix
-                    item2 = dict(item); item2["timestamp"] = f"{ts} (+{seen[ts]}s)"
-                    new_arr.append(item2)
-        obj["metrics"][mkey] = new_arr
-    return obj
-
 # -------------------------
 # Forecaster (adapter)
 # -------------------------
-def forecast_narrative_from_filters(
+def forecast_with_llm(
     adapter,
-    *,
     user_query: str,
     summary: Any,
     stats: Any,
     patterns: Any,
     filters: Dict[str, Any],
-    route: Optional[str] = None,
     cfg: ForecastConfig = ForecastConfig(),
-) -> Dict[str, Any]:
+    route: Optional[str] = None,
+    # Optional one-off overrides (rarely needed; keeps call-site simple)
+    temperature: Optional[float] = 0.0,
+    max_tokens: Optional[int] = None,
+    model_override: Optional[str] = None,
+) -> str:
     """
-    Returns a STRICT-JSON dict:
-    {
-      "metrics": {
-        "RRP": [ {timestamp, frequency, forecast, justification}, ... ],
-        "TOTALDEMAND": [ ... ]
-      }
-    }
+    Generate a clear, structured NATURAL-LANGUAGE forecast.
     """
     tgt = _derive_targets_from_filters(filters, cfg.tz)
-    regs = tgt["regions"] or ["UNKNOWN-REGION"]
-    mets = tgt["metrics"] or ["TOTALDEMAND", "RRP"]
-
-    units_lines = "\n".join([f"- {m}: {cfg.units_map.get(m, '')}" for m in mets])
+    units_lines = _render_units_lines(tgt["metrics"], cfg.units_map)
 
     summary_block  = _cap_text(summary)
     stats_block    = _cap_text(stats)
     patterns_block = _cap_text(patterns)
+    targets_header = _format_targets_header(tgt, route)
 
     system_msg = (
         "You are a precise time-series forecaster. "
-        "Generate **timestamped** forecasts for each requested metric. "
-        "Prefer ~3 significant digits and include units. "
+        "Generate timestamped forecasts for each requested metric in NATURAL LANGUAGE. "
+        "Be concise but specific. Prefer ~3 significant digits and include units. "
         "Respect requested frequency and window. "
         "Do NOT repeat the same numeric value for consecutive timestamps unless the evidence is identical; if identical, justify equality explicitly."
+        "If multiple timestamps are requested, present them as short bullet points."
+        "Do NOT fabricate new calculations; rely only on the provided evidence."
+        "Base statements only on the provided evidence; do not invent new calculations. "
     )
 
-    targets_header = _format_targets_header(tgt, route)
+    
 
     user_msg = f"""
 {targets_header}
 
-UNITS
-{units_lines}
+UNITS: {units_lines}
 
-USER QUERY
-{user_query}
+USER QUERY: {user_query}
 
 EVIDENCE (use as-is; do not recalc):
 - Statistical Insights:
@@ -178,53 +165,26 @@ EVIDENCE (use as-is; do not recalc):
 - Detected Patterns:
 {patterns_block}
 
-OUTPUT STYLE — STRICT JSON ONLY (no prose)
-Schema:
-{{
-  "metrics": {{
-    "RRP": [
-      {{
-        "timestamp": "<ISO timestamp or explicit date/time>",
-        "frequency": "<e.g. 15min|30min|1h|1d>",
-        "forecast": "<value with unit, e.g. $56.4/MWh>",
-        "justification": "tie to the EVIDENCE (patterns/stats/summary)"
-      }}
-    ],
-    "TOTALDEMAND": [
-      {{
-        "timestamp": "<ISO timestamp or explicit date/time>",
-        "frequency": "<e.g. 15min|30min|1h|1d>",
-        "forecast": "<value with unit, e.g. 8,930 MW>",
-        "justification": "tie to the EVIDENCE"
-      }}
-    ]
-  }}
-}}
-
+OUTPUT STYLE — NATURAL LANGUAGE ONLY
+- Write a clear **narrative report**.
+- Start with a short overview sentence (region(s), metric(s), window/frequency).
+- Then give the forecasts:
+- If multiple timestamps are requested:
+    * Present them in a **Markdown table** with columns: Time | Forecast | Unit
+    * Keep it concise and readable.
+- If only one timestamp: a single sentence with the forecast.
 Rules:
-- Produce **multiple timestamps** across the requested window/frequency (no single point unless the user asked for just one).
-- Use different values per timestamp unless you explicitly justify equality (e.g., flat night hours).
-- Always include both metrics if requested or default to ['TOTALDEMAND','RRP'] when unspecified.
+- Produce a single point UNLESS the user asked for multiple timestamps across the requested window/frequency.
+- Use real values per timestamp unless you explicitly justify equality (e.g., flat night hours).
+- Always include the requested metric(s) or default to both metrics ['TOTALDEMAND','RRP'] when unspecified.
 """
-    # Call adapter with strict JSON first (falls back loosely inside adapter)
     messages = [{"role": "system", "content": system_msg},
                 {"role": "user", "content": user_msg}]
-    out = adapter.chat_json_loose(
+    
+    out = adapter.chat(
         messages,
-        temperature=cfg.temperature,
-        max_tokens=cfg.max_tokens,
-        model_override=(cfg.model_override or cfg.model),
-        strict_json_first=True,
+        temperature=cfg.temperature if temperature is None else temperature,
+        max_tokens=cfg.max_tokens if max_tokens is None else max_tokens,
+        model_override=(cfg.model_override or cfg.model) if model_override is None else model_override,
     )
-    if not isinstance(out, dict):
-        # very defensive
-        try:
-            out = json.loads(out)
-        except Exception:
-            out = {"metrics": {"RRP": [], "TOTALDEMAND": []}}
-
-    # Optionally nudge duplicates
-    if cfg.enforce_unique_timestamps and isinstance(out, dict) and "metrics" in out:
-        out = _nudge_duplicate_timestamps(out)
-
-    return out
+    return (out or "").strip()

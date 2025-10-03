@@ -42,7 +42,7 @@ class Registry:
             ),
             # Google Gemini
             "gemini-flash": ModelSpec(
-                provider="gemini-openai",
+                provider="gemini",
                 model="gemini-2.5-flash",
                 api_key=os.getenv("GEMINI_API_KEY"),
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -117,12 +117,7 @@ class LLMClientAdapter:
       extra_params: Optional[Dict[str, Any]] = None,
       **kwargs: Any,  # Accept unknown keywords to avoid TypeError in callers
   ) -> str:
-      """
-      Returns assistant message text (string).
-      - If provider doesn't support JSON mode, silently ignores `response_format`.
-      - If callers pass `response_format` via kwargs, we handle/strip it too.
-      - If a TypeError still happens mentioning response_format, we retry once without it.
-      """
+      
       params: Dict[str, Any] = {
           "model": (model_override or self.spec.model),
           "messages": messages,
@@ -152,7 +147,6 @@ class LLMClientAdapter:
               resp = self._retry_chat(**params)
           else:
               raise
-
       return (resp.choices[0].message.content or "").strip()
 
     def chat_json_loose(
@@ -195,6 +189,8 @@ class LLMClientAdapter:
         if not isinstance(out, dict):
             raise ValueError("Expected JSON object from model.")
         return out
+    
+    
 
 # ---------- JSON salvage helper ----------
 def _json_loads_loose(s: str) -> Dict[str, Any]:
@@ -208,3 +204,6 @@ def _json_loads_loose(s: str) -> Dict[str, Any]:
             return json.loads(s[i:j])
         except Exception:
             return {"text": s[:2000]}
+        
+
+

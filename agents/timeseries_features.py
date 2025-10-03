@@ -202,11 +202,11 @@ def _chat_json_required(
 @dataclass
 class TimeSeriesConfig:
     temperature: float = 0.0
-    max_tokens: int = 700
+    max_tokens: int = 2000
     vague_time_map: Dict[str, Tuple[str,int]] = field(default_factory=lambda: DEFAULT_VAGUE_TIME_MAP)
-    # Holiday support (optional)
     holiday_fn: Optional[Callable[[date], bool]] = None
     holiday_country: Optional[str] = "AU"
+    holiday_state: Optional[str] = None  
 
 TIME_JSON_SCHEMA = {
     "type": "object",
@@ -234,8 +234,10 @@ TIME_JSON_SCHEMA = {
 
         "weekdays": {"type":"array","items":{"type":"string"}},
         "weekends": {"type":"boolean"},
+        "weekend_dates": { "type":"array", "items":{"type":"string"}},    # ISO YYYY-MM-DD
         "holidays": {"type":"boolean"},
-
+        "holiday_dates": { "type":"array", "items":{"type":"string"}},    # ISO YYYY-MM-DD
+        
         "horizon": {
             "type": ["object", "null"],
             "required": ["steps","units"],
@@ -280,10 +282,12 @@ TIME_JSON_SCHEMA = {
 
 class TimeSeriesFilterExtractor:
     """Extracts ONLY temporal constraints. `now_iso` must be provided by the caller (anchored outside)."""
+    
     def __init__(self, adapter: LLMClientAdapter, cfg: Optional[TimeSeriesConfig] = None):
         self.adapter = adapter
         self.cfg = cfg or TimeSeriesConfig()
 
+    
     # ---------- Prompt ----------
     def _prompt(self, user_query: str, now_iso: str) -> List[Dict[str,str]]:
         sys = (
@@ -299,11 +303,12 @@ Rules:
 - Vague times ('morning', 'afternoon', etc.) → set 'vague_label' and leave tolerance null.
 - Week filters: fill 'weekdays' with 3-letter uppercase codes (MON..SUN). Set 'weekends' boolean if user asked for weekends.
 - Horizon: if a forecast/lead is mentioned (e.g., '24 hours ahead', '2 weeks'), set horizon as steps+units.
-- Modality: if user says univariate/multivariate, set 'modality' accordingly; else null.
+- Modality: is the forecast univariate/multivariate, set 'modality' accordingly; else null.
 - Single timestamps → exact ISO points in 'single_timestamps'.
 - Timestamp spans → list under 'timestamp_ranges' with ISO 'start_time'/'end_time'.
 - Date spans → list under 'date_ranges' with 'start_date'/'end_date'.
 - Output ONLY temporal info; no regions/metrics. Extra cues go in 'notes'.
+- if notes is not null, search for extra cues in notes and add it to 'notes'.
 
 Return a JSON object with keys:
 {json.dumps(list(TIME_JSON_SCHEMA["properties"].keys()))}
@@ -311,8 +316,9 @@ Return a JSON object with keys:
 User Query: {user_query.strip()}
 """.strip()
         return [{"role":"system","content":sys},{"role":"user","content":usr}]
-
+    
     # ---------- Public API ----------
+    
     def extract(self, user_query: str, *, now_iso: Optional[str]) -> Dict[str, Any]:
         """
         Run the temporal extractor.
@@ -353,10 +359,14 @@ User Query: {user_query.strip()}
         vcenter, vtol = _apply_vague_time(out.get("vague_label"), self.cfg.vague_time_map)
         out["_vague_center"] = vcenter
         out["_vague_tolerance_minutes"] = vtol
+        # If LLM didn’t supply tolerance, fall back to our map
+        if out.get("vague_label") and out.get("vague_tolerance_minutes") is None:
+            out["vague_tolerance_minutes"] = vtol
 
         return out
 
     # ---------- Normalization ----------
+    
     def _normalize_llm_payload(self, obj: Dict[str, Any]) -> Dict[str, Any]:
         years  = [int(y) for y in (obj.get("years") or []) if str(y).isdigit()]
         months = [m for m in (obj.get("months") or []) if isinstance(m,int) and 1<=m<=12]
@@ -383,10 +393,21 @@ User Query: {user_query.strip()}
             "freq":       _normalize_freq(obj.get("freq")),
 
             "weekdays": [str(x).strip().upper() for x in (obj.get("weekdays") or [])],
-            "weekends": bool(obj.get("weekends", False)),
-            "holidays": bool(obj.get("holidays", False)),
+        "weekends": bool(obj.get("weekends", False)),
+        "weekend_dates": [d for d in (obj.get("weekend_dates") or []) if _date_or_none(d)],
 
-            "modality": (str(obj.get("modality")).lower() if obj.get("modality") else None),
+        "holidays": bool(obj.get("holidays", False)),
+        "holiday_dates": [d for d in (obj.get("holiday_dates") or []) if _date_or_none(d)],
+
+        "modality": (str(obj.get("modality")).lower() if obj.get("modality") else None),
+
+        # keep the model's vague tolerance if it provided one
+        "vague_label": obj.get("vague_label"),
+        "vague_tolerance_minutes": (
+            int(obj.get("vague_tolerance_minutes"))
+            if str(obj.get("vague_tolerance_minutes") or "").strip().isdigit()
+            else None
+        ),
 
             "single_timestamps": [st for st in (obj.get("single_timestamps") or []) if _iso_or_none(st)],
             "timestamp_ranges":  [{"start_time": _iso_or_none((r or {}).get("start_time")),
@@ -395,9 +416,7 @@ User Query: {user_query.strip()}
             "date_ranges":       [{"start_date": _date_or_none((r or {}).get("start_date")),
                                   "end_date":   _date_or_none((r or {}).get("end_date"))}
                                   for r in (obj.get("date_ranges") or [])],
-
-            "vague_label": obj.get("vague_label"),
-        }
+                                  }
 
         # Horizon
         hraw = obj.get("horizon") or {}
@@ -424,8 +443,8 @@ User Query: {user_query.strip()}
 
         # Drop invalid weekday tokens
         valid_wd = {"MON","TUE","WED","THU","FRI","SAT","SUN"}
-        out["weekdays"] = [w for w in out["weekdays"] if w in valid_wd]
-
+        wd = [w for w in out["weekdays"] if w in valid_wd]
+        out["weekdays"] = list(dict.fromkeys(wd))
         return out
 
     # ---------- Collapse ----------
@@ -577,3 +596,53 @@ User Query: {user_query.strip()}
         tokens = (notes or "").lower()
         HOLI_HINTS = ["holiday","public holiday","christmas","new year","boxing day","easter","good friday","labor day","anzac"]
         return any(h in tokens for h in HOLI_HINTS)
+
+    def _list_dates_between(self, start_iso: Optional[str], end_iso: Optional[str]) -> List[date]:
+        if not (start_iso and end_iso): return []
+        try:
+            sdt = datetime.fromisoformat(start_iso.replace("Z","+00:00")).date()
+            edt = datetime.fromisoformat(end_iso.replace("Z","+00:00")).date()
+        except Exception:
+            return []
+        if sdt > edt: sdt, edt = edt, sdt
+        out, cur = [], sdt
+        while cur <= edt:
+            out.append(cur)
+            cur = cur.fromordinal(cur.toordinal()+1)
+        return out
+
+    def _derive_weekend_and_holidays(self, out: Dict[str,Any], dates: Set[date]) -> Dict[str,Any]:
+        # Base set = union of all concrete dates we’ve already inferred
+        window_dates: Set[date] = set(dates)
+
+        # If the user gave a concrete outer window (date_start/date_end), fill the full span
+        ds, de = out.get("date_start"), out.get("date_end")
+        span = self._list_dates_between(ds, de)
+        window_dates.update(span)
+
+        # Derive weekend dates
+        weekend_dates = sorted({d for d in window_dates if d.weekday() >= 5})
+        out["weekend_dates"] = [d.isoformat() for d in weekend_dates]
+
+        # Derive holiday dates
+        holiday_dates: List[date] = []
+        if callable(self.cfg.holiday_fn):
+            holiday_dates = [d for d in window_dates if self.cfg.holiday_fn(d)]
+        elif _holidays_pkg and self.cfg.holiday_country:
+            try:
+                cal_cls = getattr(_holidays_pkg, self.cfg.holiday_country, None)
+                if cal_cls:
+                    # Python-holidays AU supports state='QLD'/etc.
+                    if self.cfg.holiday_country == "AU":
+                        hd = cal_cls(state=self.cfg.holiday_state)  # may be None
+                    else:
+                        hd = cal_cls()
+                    holiday_dates = [d for d in window_dates if d in hd]
+            except Exception:
+                pass
+
+        out["holiday_dates"] = sorted({d.isoformat() for d in holiday_dates})
+        # Flags remain truthful even if lists are empty
+        out["weekends"] = bool(out.get("weekends") or len(out["weekend_dates"]) > 0)
+        out["holidays"] = bool(out.get("holidays") or len(out["holiday_dates"]) > 0)
+        return out  
