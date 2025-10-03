@@ -1,15 +1,24 @@
+# ==================================
+# Retrieval — horizon-aware with similarity scoring
+# ==================================
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Literal
+from datetime import timedelta
 import pandas as pd
+import numpy as np
+
+Horizon = Literal["short_term", "mid_term", "long_term"]
 
 # -----------------------------
-# Config 
+# Config (now includes ablation toggles & weights)
 # -----------------------------
 @dataclass
 class RetrievalConfig:
     tz: str = "Australia/Sydney"
     source_tz: str = "Australia/Sydney"
+
+    # General
     previous_years: int = 5
     time_tolerance_minutes: int = 30
     sameweek_days: int = 3
@@ -18,11 +27,34 @@ class RetrievalConfig:
     })
     anchor_mode: str = "latest_by_region"   # "latest_by_region" | "filters"
     safe_default_recent_days: int = 7
+    max_segments: int = 5000   # limit returned rows for context budget
 
-    # NEW knobs for short/long analogs (used by ablations & harness)
-    same_hour_back_days: int = 7                    # N previous days for short-term same-hour analogs
+    # Short-term knobs
+    same_hour_back_days: int = 14
+    short_recent_equals_horizon: bool = True
+    short_rolling_block_days: int = 28
     include_same_hour_previous_days: bool = True
+    include_same_weekday_recent_weeks: bool = True
+    same_weekday_recent_weeks: int = 8
+
+    # Mid-term knobs (15 days – 3 months)
+    mid_rolling_weeks_back: int = 12
+    mid_same_weekday_hour_profiles_weeks: int = 16
+    mid_same_month_prev_years: int = 4
+    mid_same_month_buffer_days: int = 7
+
+    # Long-term knobs (> 3 months)
     include_same_woy_prior_years: bool = True
+    long_same_month_years: int = 6
+    long_same_month_buffer_days: int = 14
+    long_woy_tol: int = 1
+    long_macro_years: int = 3  # minimum span for macro-trend context
+
+    # Scoring weights
+    w_recency: float = 0.45
+    w_same_hour: float = 0.25
+    w_same_weekday: float = 0.20
+    w_bias: float = 0.10  # small bias for stability
 
 # -----------------------------
 # Timezone utilities
@@ -56,7 +88,7 @@ def _normalize_times(times: List[str]) -> List[Tuple[int,int,int]]:
     return out
 
 # -----------------------------
-# Filter executor 
+# Filter executor (tz-safe, tolerant)
 # -----------------------------
 def filter_data(
     df: pd.DataFrame,
@@ -198,7 +230,7 @@ def _slice_same_date_prior_years(
     years_back: int,
     cfg: RetrievalConfig
 ) -> pd.DataFrame:
-    """Same date/time window (duration preserved) in each of the previous N years."""
+    """Same date/time window (duration preserved) in each of the previous N years (tz-aware)."""
     parts = []
     duration = (end - start) if end is not None else None
     for i in range(1, years_back + 1):
@@ -232,7 +264,6 @@ def _slice_same_week_prior_years(
     parts = []
     for i in range(1, years_back + 1):
         y = anchor.year - i
-        # clamp day to 28 to avoid Feb issues
         try:
             base = anchor.replace(year=y, day=min(anchor.day, 28))
         except Exception:
@@ -267,6 +298,7 @@ def _slice_same_hour_previous_days(
 
     ts = _to_target_tz(work["SETTLEMENTDATE"], cfg.source_tz, cfg.tz)
     work = work.assign(__ts=ts).dropna(subset=["__ts"])
+
     anchor_local = anchor.tz_convert(cfg.tz) if anchor.tzinfo else anchor.tz_localize(cfg.tz)
     tol = pd.Timedelta(minutes=cfg.time_tolerance_minutes)
     tod = anchor_local - anchor_local.normalize()
@@ -280,6 +312,39 @@ def _slice_same_hour_previous_days(
             pick = pick.copy()
             pick["LAG_DAYS"] = d
             parts.append(pick)
+    return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
+
+# -----------------------------
+# NEW: Same weekday/hour across recent weeks (profiles)
+# -----------------------------
+def _slice_same_weekday_recent_weeks(
+    df: pd.DataFrame,
+    anchor: pd.Timestamp,
+    weeks: int,
+    cfg: RetrievalConfig,
+    regions: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """For each of the last `weeks`, pick rows on the same weekday & (if hourly) same hour around anchor."""
+    work = _apply_region_filter(df, regions or [])
+    if work.empty:
+        return work.iloc[0:0]
+    ts = _to_target_tz(work["SETTLEMENTDATE"], cfg.source_tz, cfg.tz)
+    work = work.assign(__ts=ts, __wkday=ts.dt.weekday, __hour=ts.dt.hour).dropna(subset=["__ts"])
+
+    anchor_local = anchor.tz_convert(cfg.tz) if anchor.tzinfo else anchor.tz_localize(cfg.tz)
+    anchor_wk = anchor_local.weekday()
+    anchor_hr = anchor_local.hour
+    tol = pd.Timedelta(minutes=cfg.time_tolerance_minutes)
+
+    parts = []
+    for w in range(1, weeks + 1):
+        ref = anchor_local - pd.Timedelta(weeks=w)
+        # Window one day around the target weekday to be robust (±1d)
+        win_start = (ref.normalize() - pd.Timedelta(days=1)) + pd.to_timedelta(anchor_hr, unit="h") - tol
+        win_end   = (ref.normalize() + pd.Timedelta(days=1)) + pd.to_timedelta(anchor_hr, unit="h") + tol
+        pick = work[(work["__ts"] >= win_start) & (work["__ts"] <= win_end)]
+        if not pick.empty:
+            parts.append(pick.drop(columns=["__ts"]))
     return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
 
 # -----------------------------
@@ -318,10 +383,82 @@ def _slice_same_woy_prior_years(
         pick = work[(work["__ts"] >= start) & (work["__ts"] <= end)].drop(columns="__ts")
         if not pick.empty:
             pick = pick.copy()
-            # ✅ pandas weekofyear is deprecated; use ISO calendar:
             pick["PRIOR_WOY"] = int(base.isocalendar().week)
             parts.append(pick)
     return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
+
+# -----------------------------
+# NEW: Same month across years (± buffer days)
+# -----------------------------
+def _slice_same_month_prev_years(
+    df: pd.DataFrame,
+    anchor: pd.Timestamp,
+    years_back: int,
+    buffer_days: int,
+    cfg: RetrievalConfig,
+    regions: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """Grab [month(anchor) ± buffer_days] across `years_back` prior years (tz-aware)."""
+    work = _apply_region_filter(df, regions or [])
+    if work.empty:
+        return work.iloc[0:0]
+    ts = _to_target_tz(work["SETTLEMENTDATE"], cfg.source_tz, cfg.tz)
+    work = work.assign(__ts=ts).dropna(subset=["__ts"])
+
+    anchor_local = anchor.tz_convert(cfg.tz) if anchor.tzinfo else anchor.tz_localize(cfg.tz)
+    month = anchor_local.month
+    start_day = max(1, anchor_local.day - buffer_days)
+    end_day = min(28, anchor_local.day + buffer_days)  # 28 guard for Feb alignment
+
+    parts = []
+    for i in range(1, years_back + 1):
+        y = anchor_local.year - i
+        try:
+            s = pd.Timestamp(year=y, month=month, day=start_day, tz=cfg.tz)
+            e = pd.Timestamp(year=y, month=month, day=end_day, tz=cfg.tz) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        except Exception:
+            # fallback: shift by years and clamp day
+            tmp = anchor_local - pd.DateOffset(years=i)
+            s = pd.Timestamp(year=tmp.year, month=month, day=max(1, min(tmp.day, 28)), tz=cfg.tz)
+            e = s + pd.Timedelta(days=max(1, (end_day - start_day)))
+        pick = work[(work["__ts"] >= s) & (work["__ts"] <= e)]
+        if not pick.empty:
+            parts.append(pick.drop(columns=["__ts"]))
+    return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
+
+# -----------------------------
+# Scoring & trimming
+# -----------------------------
+def _score_candidates(df: pd.DataFrame, anchor: pd.Timestamp, cfg: RetrievalConfig) -> pd.DataFrame:
+    if df.empty:
+        return df
+    ts = _to_target_tz(df["SETTLEMENTDATE"], cfg.source_tz, cfg.tz)
+    df = df.copy()
+    df["__ts"] = ts
+    # Leakage guard: drop any rows >= anchor
+    anchor_local = anchor.tz_convert(cfg.tz) if anchor.tzinfo else anchor.tz_localize(cfg.tz)
+    df = df[df["__ts"] < anchor_local]
+
+    # Features
+    hours_ago = (anchor_local - df["__ts"]).dt.total_seconds() / 3600.0
+    rec = 1.0 / (1.0 + np.log1p(np.maximum(0.0, hours_ago)))
+    same_hour = (df["__ts"].dt.hour == anchor_local.hour).astype(float)
+    same_wkday = (df["__ts"].dt.weekday == anchor_local.weekday()).astype(float)
+
+    # Score
+    df["ret_score"] = (cfg.w_recency * rec
+                       + cfg.w_same_hour * same_hour
+                       + cfg.w_same_weekday * same_wkday
+                       + cfg.w_bias)
+
+    # Dedup by timestamp (keep max score)
+    df = df.sort_values(["SETTLEMENTDATE", "ret_score"], ascending=[True, False])
+    df = df.drop_duplicates(subset=["SETTLEMENTDATE"], keep="first")
+
+    # Trim to max_segments
+    if len(df) > cfg.max_segments:
+        df = df.nlargest(cfg.max_segments, "ret_score")
+    return df.drop(columns=["__ts"])
 
 # -----------------------------
 # Public API
@@ -329,20 +466,28 @@ def _slice_same_woy_prior_years(
 def retrieve_context(
     df: pd.DataFrame,
     filters: Dict[str, Any],
-    route: str,                        # "short_term" | "long_term"
+    route: Horizon,                  # "short_term" | "mid_term" | "long_term"
     cfg: RetrievalConfig = RetrievalConfig(),
 ) -> Dict[str, Any]:
     """
     SHORT_TERM:
-      1) Recent window prior to target (span from freq; fallback 7d)
-      2) Same required date/time window in previous years
-      3) Same-week prior years at exact time (if time given)
-      4) NEW: same-hour previous N days (if enabled)
+      - Recent window equal to horizon span (from freq; fallback 7d)
+      - Same-hour previous N days
+      - Same-weekday profiles across recent weeks
+      - Prior years: same date/time window (tight)
+      - Prior years: same week window (±sameweek_days)
 
-    LONG_TERM:
-      1) Same required date/time window in previous years
-      2) Same-week prior years (if enabled)
-      3) NEW: (also returns same_hour_previous_days empty unless you enable it explicitly)
+    MID_TERM (15d–3mo):
+      - Rolling last W weeks
+      - Same weekday/hour profiles across B recent weeks
+      - Same month across prior My years (±buffer)
+      - Prior years: same week window (±sameweek_days)
+
+    LONG_TERM (>3mo):
+      - Same month across last Y years (±buffer)
+      - Same WoY across last Y years (±tol)
+      - Macro trend window (last K years)
+      - Prior years: same date/time window (optional)
     """
     assert "SETTLEMENTDATE" in df.columns, "df must contain SETTLEMENTDATE"
 
@@ -362,12 +507,15 @@ def retrieve_context(
 
     recent_span = _freq_to_recent_span(freq, cfg)
 
-    # init empty slices
-    recent_window             = work.iloc[0:0]
-    prior_years_same_dates    = work.iloc[0:0]
-    prior_years_same_week     = work.iloc[0:0]
-    same_hour_previous_days   = work.iloc[0:0]
-    same_woy_prior_years      = work.iloc[0:0]
+    # init slices
+    recent_window = work.iloc[0:0]
+    same_hour_previous_days = work.iloc[0:0]
+    same_weekday_recent_weeks = work.iloc[0:0]
+    prior_years_same_dates = work.iloc[0:0]
+    prior_years_same_week = work.iloc[0:0]
+    same_woy_prior_years = work.iloc[0:0]
+    same_month_prev_years = work.iloc[0:0]
+    macro_trend_blocks = work.iloc[0:0]
 
     # target window for prior-year replication
     target_start = f_start if f_start is not None else anchor
@@ -375,8 +523,9 @@ def retrieve_context(
     times = filters.get("times") or []
     keep_exact_time = bool(times)
 
-    # short-term: recent window + same-hour analogs
+    # -------- Short-term
     if route == "short_term" and anchor is not None:
+        # recent window equals horizon span (or fallback)
         r_start = anchor - recent_span
         recent_window = filter_data(work, {"date_start": r_start, "date_end": anchor, "regions": regions}, cfg=cfg)
 
@@ -385,21 +534,93 @@ def retrieve_context(
                 work, anchor, cfg.same_hour_back_days, cfg, regions
             )
 
-    # prior years: same dates
-    if target_start is not None:
-        prior_years_same_dates = _slice_same_date_prior_years(work, target_start, target_end, cfg.previous_years, cfg)
-        if target_end is None and keep_exact_time and not prior_years_same_dates.empty:
-            prior_years_same_dates = filter_data(prior_years_same_dates, {"times": times}, cfg=cfg)
+        if cfg.include_same_weekday_recent_weeks:
+            same_weekday_recent_weeks = _slice_same_weekday_recent_weeks(
+                work, anchor, cfg.same_weekday_recent_weeks, cfg, regions
+            )
 
-    # prior years: same week
-    if anchor is not None:
-        duration = (target_end - target_start) if (target_start is not None and target_end is not None) else None
+        # prior years (tight)
+        if target_start is not None:
+            prior_years_same_dates = _slice_same_date_prior_years(work, target_start, target_end, cfg.previous_years, cfg)
+            if target_end is None and keep_exact_time and not prior_years_same_dates.empty:
+                prior_years_same_dates = filter_data(prior_years_same_dates, {"times": times}, cfg=cfg)
+
+        if anchor is not None:
+            duration = (target_end - target_start) if (target_start is not None and target_end is not None) else None
+            prior_years_same_week = _slice_same_week_prior_years(
+                work, anchor, cfg.previous_years, cfg, duration=duration,
+                keep_exact_time=keep_exact_time, times=times
+            )
+
+    # -------- Mid-term
+    if route == "mid_term" and anchor is not None:
+        # rolling last W weeks
+        weeks = cfg.mid_rolling_weeks_back
+        start = anchor - pd.Timedelta(weeks=weeks)
+        recent_window = filter_data(work, {"date_start": start, "date_end": anchor, "regions": regions}, cfg=cfg)
+
+        # weekday/hour profiles across B weeks
+        same_weekday_recent_weeks = _slice_same_weekday_recent_weeks(
+            work, anchor, cfg.mid_same_weekday_hour_profiles_weeks, cfg, regions
+        )
+
+        # same month across prior years (±buffer)
+        same_month_prev_years = _slice_same_month_prev_years(
+            work, anchor, cfg.mid_same_month_prev_years, cfg.mid_same_month_buffer_days, cfg, regions
+        )
+
+        # prior years same week window around anchor (adds data variety)
         prior_years_same_week = _slice_same_week_prior_years(
-            work, anchor, cfg.previous_years, cfg, duration=duration,
+            work, anchor, cfg.previous_years, cfg, duration=None,
             keep_exact_time=keep_exact_time, times=times
         )
+
+    # -------- Long-term
+    if route == "long_term" and anchor is not None:
+        # same month across last Y years
+        same_month_prev_years = _slice_same_month_prev_years(
+            work, anchor, cfg.long_same_month_years, cfg.long_same_month_buffer_days, cfg, regions
+        )
+
+        # WoY across last Y years
         if cfg.include_same_woy_prior_years:
-            same_woy_prior_years = _slice_same_woy_prior_years(work, anchor, cfg.previous_years, cfg, regions)
+            same_woy_prior_years = _slice_same_woy_prior_years(
+                work, anchor, cfg.long_same_month_years, cfg, regions
+            )
+
+        # macro trend window (last K years)
+        macro_years = max(cfg.long_macro_years, 3)
+        macro_trend_blocks = work[_to_target_tz(work["SETTLEMENTDATE"], cfg.source_tz, cfg.tz)
+                                  >= (anchor - pd.DateOffset(years=macro_years))]
+
+        # optional: also keep tight same-date prior years if you gave a target window
+        if target_start is not None:
+            prior_years_same_dates = _slice_same_date_prior_years(work, target_start, target_end, cfg.previous_years, cfg)
+
+    # ---------------- Scoring & combination ----------------
+    block_list = [
+        ("recent_window", recent_window),
+        ("same_hour_previous_days", same_hour_previous_days),
+        ("same_weekday_recent_weeks", same_weekday_recent_weeks),
+        ("prior_years_same_dates", prior_years_same_dates),
+        ("prior_years_same_week", prior_years_same_week),
+        ("same_woy_prior_years", same_woy_prior_years),
+        ("same_month_prev_years", same_month_prev_years),
+        ("macro_trend_blocks", macro_trend_blocks),
+    ]
+
+    # concat, label, score
+    parts = []
+    counts = {}
+    for name, part in block_list:
+        counts[name] = int(len(part))
+        if not part.empty:
+            tmp = part.copy()
+            tmp["ret_block"] = name
+            parts.append(tmp)
+
+    combined = pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
+    combined = _score_candidates(combined, anchor, cfg)
 
     meta = {
         "route": route,
@@ -407,24 +628,27 @@ def retrieve_context(
         "target_end_iso": target_end.isoformat() if target_end is not None else None,
         "anchor_iso": anchor.isoformat() if anchor is not None else None,
         "freq": freq,
-        "recent_span": str(recent_span) if (route == "short_term" and anchor is not None) else None,
+        "recent_span": str(recent_span) if anchor is not None else None,
         "previous_years": cfg.previous_years,
         "tz": cfg.tz,
-        "counts": {
-            "recent_window": int(len(recent_window)),
-            "prior_years_same_dates": int(len(prior_years_same_dates)),
-            "prior_years_same_week": int(len(prior_years_same_week)),
-            "same_hour_previous_days": int(len(same_hour_previous_days)),
-            "same_woy_prior_years": int(len(same_woy_prior_years)),
-        },
-        "notes": [],
+        "counts": counts,
+        "total_after_merge": int(len(combined)),
+        "notes": [
+            "Leakage-safe: rows >= anchor are filtered out",
+            "ret_score combines recency, same-hour, same-weekday",
+        ],
     }
 
     return {
         "recent_window": recent_window,
+        "same_hour_previous_days": same_hour_previous_days,
+        "same_weekday_recent_weeks": same_weekday_recent_weeks,
         "prior_years_same_dates": prior_years_same_dates,
         "prior_years_same_week": prior_years_same_week,
-        "same_hour_previous_days": same_hour_previous_days,
         "same_woy_prior_years": same_woy_prior_years,
+        "same_month_prev_years": same_month_prev_years,
+        "macro_trend_blocks": macro_trend_blocks,
+        # Scored & deduped union to feed the ForecastingAgent / prompt builder
+        "combined": combined,
         "meta": meta,
     }

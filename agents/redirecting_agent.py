@@ -84,12 +84,7 @@ def classify_horizon(
     cfg: HorizonConfig = HorizonConfig(),
 ) -> str:
     """
-    Classify a query's horizon relative to an anchor time.
-
-    If cfg.reference_time is set, classify relative to that time.
-    Otherwise, classify relative to the dataset's latest timestamp.
-
-    Returns one of: "short_term", "mid_term", "long_term".
+    Classify a query's horizon relative to an anchor time : "short_term", "mid_term", "long_term".
     """
     if cfg.reference_time is not None:
         ref_ts = _coerce_ts(cfg.reference_time)
