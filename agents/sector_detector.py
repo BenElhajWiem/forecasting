@@ -9,7 +9,7 @@ class SectorConfig:
     )
     model: Optional[str] = None
     temperature: float = 0.0
-    max_tokens: int = 2
+    max_tokens: int = 200
     fallback: str = "Undetected"   # used if the model gives something invalid
 
 

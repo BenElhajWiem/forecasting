@@ -24,7 +24,7 @@ class HorizonConfig:
     model: Optional[str] = None
     model_override: Optional[str] = None
     temperature: float = 0.0
-    max_tokens: int = 5
+    max_tokens: int = 200
 
 # -----------------------------------
 # Utilities
