@@ -4,11 +4,11 @@ queries = [
     "What is the forecasted RRP in NSW1 on April 5th, 2025 at 7am ?",
     "Estimate the electricity demand in QLD1 on April 10th, 2025 at midnight.",
     "How much will the RRP cost in TAS1 on April 20th at 4 PM?",
-    "What are the TOTALDEMAND and RRP in NSW1 in 2025/04/20 at late evening ?",
+    "What are the TOTALDEMAND and RRP in NSW1 in 2025/04/20 in the late evening ?",
     "RRP in NSW1 on April 25th, 2025 at 6 AM?",
     "What will RRP be in TAS1 at 18:00 on April 20th?",
 
-    "Forecast the next 24 hours of hourly demand for NSW1 starting April 12, 2025 at 00:00"
+    "Forecast the next 24 hours of hourly demand for NSW1 starting April 12, 2025 at 00:00",
     "Between 2025-04-12 12:00 and 2025-04-13 12:00, provide price every 30 minutes in VIC1.",
     "Show the demand forecast for QLD1 over the next 48 hours.",
     "Generate day-ahead hourly price and demand forecasts for Queensland region for April 15, 2025."
