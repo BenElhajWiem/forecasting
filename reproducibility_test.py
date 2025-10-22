@@ -12,21 +12,22 @@ log = logging.getLogger("repro")
 # =========================
 # Your queries
 # =========================
+    # "Predict the demand and price for New South Wales on April the 1st, 2025 at mid-day.",
+    # "Estimate the total demand for Victoria on April 12, 2025 at 18:00.",
+    # "What is the forecasted RRP in NSW1 on April 5th, 2025 at 7am ?",
+    # "Estimate the electricity demand in QLD1 on April 10th, 2025 at midnight.",
+    # "How much will the RRP cost in TAS1 on April 20th at 4 PM?",
+    # "What are the TOTALDEMAND and RRP in NSW1 in 2025/04/20 in the late evening ?",
+    # "RRP in NSW1 on April 25th, 2025 at 6 AM?",
+    # "What will RRP be in TAS1 at 18:00 on April 20th?",
+    # "Forecast next 24 hours (hourly) of TOTALDEMAND for NSW1 starting 2025-04-12 at 00:00:00.",
+    # "Between 2025-04-12 12:00 and 2025-04-13 12:00, provide price every 30 minutes in VIC1.",
+    # "Show the TOTALDEMAND forecast for QLD1 for the next 48 hours (hourly) starting now.",
+    # "Generate day-ahead hourly TOTALDEMAND and RRP forecasts for QLD1 for 2025-04-15.",
+    # "Describe the expected trend in TOTALDEMAND for QLD1 during 2025-05.",
+
 QUERIES: List[str] = [
-    "Predict the TOTALDEMAND and RRP for NSW1 on 2025-04-01T12:00:00.",
-    "Estimate the TOTALDEMAND for VIC1 on 2025-04-12T18:00:00.",
-    "What is the forecasted RRP in NSW1 on 2025-04-05T07:00:00?",
-    "Estimate the TOTALDEMAND in QLD1 on 2025-04-10T00:00:00.",
-    "What will the RRP be in TAS1 on 2025-04-20T16:00:00?",
-    "Provide TOTALDEMAND and RRP in NSW1 on 2025-04-20T22:00:00.",
-    "What will the RRP be in NSW1 on 2025-04-25T06:00:00?",
-    "What will the RRP be in TAS1 on 2025-04-20T18:00:00?",
-    "Forecast next 24 hours (hourly) of TOTALDEMAND for NSW1 starting 2025-04-12T00:00:00.",
-    "Between 2025-04-12T12:00:00 and 2025-04-13T12:00:00, provide RRP every 30 minutes in VIC1.",
-    "Show the TOTALDEMAND forecast for QLD1 for the next 48 hours (hourly) starting now.",
-    "Generate day-ahead hourly TOTALDEMAND and RRP forecasts for QLD1 for 2025-04-15.",
-    "Describe the expected trend in TOTALDEMAND for QLD1 during 2025-05.",
-    "Provide the forecasted TOTALDEMAND at 18:00 on each weekend day in VIC1 during 2025-04.",
+    "Provide the forecasted TOTALDEMAND at 18:00 on each weekend day in qld1 during 2025-04.",
     "Predict daily RRP in VIC1 throughout 2025-06.",
     "Show weekly TOTALDEMAND forecasts for NSW1 across 2025-04.",
     "Show the wholesale RRP forecast across all regions (NSW1,VIC1,QLD1,SA1,TAS1) during 2025-06.",
@@ -34,13 +35,19 @@ QUERIES: List[str] = [
     "Predict RRP for QLD1 during 2025-06 to 2025-07.",
     "Identify high-demand periods expected in TAS1 between 2025-05-01 and 2025-07-31.",
     "What is the expected trend in TOTALDEMAND for QLD1 on 2025-05-02?",
-    "Describe how load evolves in SA1 from 2025-04-01 to 2025-07-31.",
+    "Describe how load evolves in SA1 from 2025-04-01 to 2025-06-31.",
     "Predict RRP during 06:00–12:00 (morning hours) in NSW1 throughout 2025-05 (hourly).",
     "What is the electricity demand expected on public holidays in QLD1 during 2025-Q2?",
     "What is the electricity demand expected on public holidays in NSW1 during 2025-Q4?",
     "Describe how TOTALDEMAND evolves in NSW1 from 2025-04-01 to 2025-07-31.",
     "Identify high-demand periods expected in NSW1 between 2025-05-01 and 2025-07-31.",
 ]
+
+    # run it with deep seek on these queries:
+    # "Provide the forecasted TOTALDEMAND at 18:00 on each weekend day in qld1 during 2025-04.",
+    # "Describe how load evolves in SA1 from 2025-04-01 to 2025-06-31.",
+
+
 
 # =========================
 # Helpers
@@ -74,7 +81,7 @@ def run_10_reps_for_query(
     temperature: float,
     max_tokens: Optional[int],
 ) -> Dict[str, Any]:
-    reps = 10
+    reps = 3
     run_stamp = ts()
     jsonl_path = os.path.join(out_dir, f"{preset_name}.reps{reps}.{run_stamp}.jsonl")
     ensure_dir(out_dir)
@@ -146,8 +153,8 @@ def main():
     ap = argparse.ArgumentParser(description="LLM reproducibility benchmark (10x per query)")
     ap.add_argument("--presets", default="ALL",
                     help='Comma-separated preset keys, or "ALL" for every preset with an API key.')
-    ap.add_argument("--out_dir", default="repro_logs_10x", help="Directory for logs")
-    ap.add_argument("--csv", default="repro_summary_10x.csv", help="Summary CSV filename (inside out_dir)")
+    ap.add_argument("--out_dir", default="repro_logs_3x", help="Directory for logs")
+    ap.add_argument("--csv", default="repro_summary_3x.csv", help="Summary CSV filename (inside out_dir)")
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--max_tokens", type=int, default=None)
     args = ap.parse_args()
@@ -204,3 +211,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+#python reproducibility_test.py --presets ALL
+# or specific models:
+#python reproducibility_test.py --presets "claude-api" |"gemini-flash-native,openai-mini"

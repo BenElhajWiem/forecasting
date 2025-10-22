@@ -7,9 +7,9 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
 
-
     registry = Registry()
-    spec = registry.presets["gemini-flash-native"]
+    # specify the model to use
+    spec = registry.presets["gemini-flash-native"] 
     adapter = LLMClientAdapter(spec)
 
     user_query = "Estimate the electricity demand and RRP in QLD1 on April 10th, 2025 every 2 hours."
