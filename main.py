@@ -9,7 +9,7 @@ def main():
 
     registry = Registry()
     # specify the model to use
-    spec = registry.presets["gemini-flash-native"] 
+    spec = registry.presets["deepseek-chat"] 
     adapter = LLMClientAdapter(spec)
 
     user_query = "Estimate the electricity demand and RRP in QLD1 on April 10th, 2025 every 2 hours."

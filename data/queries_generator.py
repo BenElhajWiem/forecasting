@@ -156,8 +156,8 @@ def generate_hourly():
 # -------------------- MAIN --------------------
 
 if __name__ == "__main__":
-    daily = generate_daily()    # 192
-    hourly = generate_hourly()  # 96
+    daily = generate_daily()    
+    hourly = generate_hourly()  
     all_q = daily + hourly      
 
     with open("ablation/queries_eval.json", "w") as f:
