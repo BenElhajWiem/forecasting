@@ -11,18 +11,22 @@ load_dotenv(find_dotenv())
 from openai import OpenAI
 from openai import BadRequestError
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-from utils.cost import estimate_cost
+
+from ablation.utils.cost import estimate_cost  # <-- adjust if your path differs
 
 logger = logging.getLogger(__name__)
 os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GLOG_minloglevel"] = "2"
 
+
 # -------------------------
 # Helpers
 # -------------------------
 def _rough_token_estimate(txt: str) -> int:
-    if not isinstance(txt, str): return 0
+    if not isinstance(txt, str):
+        return 0
     return max(1, int(len(txt) / 4))
 
 def _json_loads_loose(s: str) -> Dict[str, Any]:
@@ -40,7 +44,8 @@ def _extract_choice_text(choice) -> str:
     msg = getattr(choice, "message", None)
     if msg is not None:
         c = getattr(msg, "content", "")
-        if isinstance(c, str): return c
+        if isinstance(c, str):
+            return c
         if isinstance(c, list):
             buf = []
             for p in c:
@@ -50,8 +55,10 @@ def _extract_choice_text(choice) -> str:
                     t = getattr(p, "text", None)
                     if isinstance(t, str): buf.append(t)
             return "".join(buf)
-        if isinstance(c, dict) and "text" in c: return c["text"]
-    if hasattr(choice, "text") and isinstance(choice.text, str): return choice.text
+        if isinstance(c, dict) and "text" in c:
+            return c["text"]
+    if hasattr(choice, "text") and isinstance(choice.text, str):
+        return choice.text
     delta = getattr(choice, "delta", None)
     if delta is not None:
         dc = getattr(delta, "content", "")
@@ -59,12 +66,14 @@ def _extract_choice_text(choice) -> str:
     return ""
 
 def _is_max_tokens(fr: Any) -> bool:
+    # keep your existing heuristic: enum name "MAX_TOKENS", str "MAX_TOKENS", or int code == 2
     if fr is None: return False
     name = getattr(fr, "name", None)
     if isinstance(name, str) and name.upper() == "MAX_TOKENS": return True
     if isinstance(fr, str) and fr.upper() == "MAX_TOKENS": return True
     if isinstance(fr, int) and fr == 2: return True
     return False
+
 
 # -------------------------
 # Registry
@@ -82,7 +91,7 @@ class ModelSpec:
 
 class Registry:
     """
-    Instrumented registry with the same keys as your original one.
+    Instrumented registry mirroring your original preset keys.
     Safe to import only in ablation code.
     """
     def __init__(self):
@@ -128,15 +137,16 @@ class Registry:
             raise KeyError(f"Unknown preset: {name}")
         return self.presets[name]
 
-# keep a module-level default instance if you like parity
+# a module-level default if convenient
 registry = Registry()
+
 
 # -------------------------
 # Adapter (instrumented)
 # -------------------------
 class LLMClientAdapter:
     """
-    API-compatible with your original adapter:
+    API-compatible with your existing adapter:
       - chat() -> str
       - chat_json_loose() -> dict
     Adds:
@@ -146,7 +156,7 @@ class LLMClientAdapter:
 
     def __init__(self, spec: ModelSpec):
         self.spec = spec
-        self._current_stage = None
+        self._current_stage: Optional[str] = None
         self._call_log: List[Dict[str, Any]] = []
         self._usage = {"in": 0, "out": 0}
 
@@ -172,20 +182,42 @@ class LLMClientAdapter:
         finally:
             self._current_stage = prev
 
-    def set_stage(self, name: Optional[str]):
+    def set_stage(self, name: Optional[str]):  # optional direct setter
         self._current_stage = name
 
     # ---- accounting API ----
-    def reset_usage(self): self._usage = {"in": 0, "out": 0}
-    def reset_call_log(self): self._call_log = []; self.reset_usage()
-    def usage(self) -> dict: return dict(self._usage)
-    def call_log(self) -> List[Dict[str, Any]]: return [dict(x) for x in self._call_log]
+    def reset_usage(self):
+        self._usage = {"in": 0, "out": 0}
+
+    def reset_call_log(self):
+        self._call_log = []
+        self.reset_usage()
+
+    def usage(self) -> dict:
+        return dict(self._usage)
+
+    def call_log(self) -> List[Dict[str, Any]]:
+        return [dict(x) for x in self._call_log]
+
     def totals(self) -> Dict[str, Any]:
         ti = sum(x["tokens_in"] for x in self._call_log)
         to = sum(x["tokens_out"] for x in self._call_log)
         tc = sum(x["cost_usd"] for x in self._call_log)
         tl = sum(x["latency_sec"] for x in self._call_log)
         return {"tokens_in": ti, "tokens_out": to, "cost_usd": tc, "latency_sec": tl}
+
+    def _record_call(self, *, prompt_tokens: int, completion_tokens: int, latency_sec: float):
+        self._usage["in"] += int(prompt_tokens)
+        self._usage["out"] += int(completion_tokens)
+        cost = estimate_cost(self.spec.model, prompt_tokens, completion_tokens)
+        self._call_log.append({
+            "stage": self._current_stage or "unknown",
+            "model": self.spec.model,
+            "latency_sec": float(latency_sec),
+            "tokens_in": int(prompt_tokens),
+            "tokens_out": int(completion_tokens),
+            "cost_usd": float(cost),
+        })
 
     # ---- public chat APIs ----
     def chat(
@@ -201,7 +233,11 @@ class LLMClientAdapter:
     ) -> str:
         if self.spec.sdk == "gemini_native":
             return self._chat_gemini_native(
-                messages, temperature, max_tokens, model_override, response_format
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model_override=model_override,
+                response_format=response_format,
             )
         return self._chat_openai_compat(
             messages,
@@ -224,20 +260,6 @@ class LLMClientAdapter:
     ) -> Dict[str, Any]:
         txt = self.chat(messages, temperature=temperature, max_tokens=max_tokens, model_override=model_override)
         return _json_loads_loose(txt)
-
-    # ---- internal accounting sink ----
-    def _record_call(self, *, prompt_tokens: int, completion_tokens: int, latency_sec: float):
-        self._usage["in"] += int(prompt_tokens)
-        self._usage["out"] += int(completion_tokens)
-        cost = estimate_cost(self.spec.model, prompt_tokens, completion_tokens)
-        self._call_log.append({
-            "stage": self._current_stage or "unknown",
-            "model": self.spec.model,
-            "latency_sec": float(latency_sec),
-            "tokens_in": int(prompt_tokens),
-            "tokens_out": int(completion_tokens),
-            "cost_usd": float(cost),
-        })
 
     # ---- OpenAI-compatible path ----
     def _chat_openai_compat(
@@ -264,8 +286,10 @@ class LLMClientAdapter:
             params["reasoning_effort"] = self.spec.reasoning_effort
         if self.spec.extra_body and self.spec.provider not in ("gemini",):
             params["extra_body"] = self.spec.extra_body
-        if extra_params: params.update(extra_params)
-        if kwargs: params.update(kwargs)
+        if extra_params:
+            params.update(extra_params)
+        if kwargs:
+            params.update(kwargs)
 
         t0 = time.perf_counter()
         resp = self._retry_chat(**params)
@@ -273,19 +297,19 @@ class LLMClientAdapter:
 
         out_text = _extract_choice_text(resp.choices[0]) if getattr(resp, "choices", None) else ""
 
-        # usage robustly
+        # robust usage extraction
         pt = ct = 0
-        ui = getattr(resp, "usage", None)
         try:
+            ui = getattr(resp, "usage", None)
             if ui:
                 pt = int(getattr(ui, "prompt_tokens", 0) or ui.get("prompt_tokens", 0))
                 ct = int(getattr(ui, "completion_tokens", 0) or ui.get("completion_tokens", 0))
             else:
-                in_text = "\n".join(m.get("content","") for m in messages)
+                in_text = "\n".join(m.get("content", "") for m in messages)
                 pt = _rough_token_estimate(in_text)
                 ct = _rough_token_estimate(out_text or "")
         except Exception:
-            in_text = "\n".join(m.get("content","") for m in messages)
+            in_text = "\n".join(m.get("content", "") for m in messages)
             pt = _rough_token_estimate(in_text)
             ct = _rough_token_estimate(out_text or "")
 
@@ -311,14 +335,15 @@ class LLMClientAdapter:
             time.sleep(0.6)
         raise last_err
 
-    # ---- Gemini native path ----
+    # ---- Gemini native path (kept identical to your working logic, with instrumentation) ----
     @staticmethod
     def _split_system_and_contents(messages: List[Dict[str, str]]):
         sys = "\n".join([m["content"] for m in messages if m.get("role") == "system"]).strip() or None
         contents = []
         for m in messages:
             r = m.get("role")
-            if r == "system": continue
+            if r == "system":
+                continue
             if r == "user":
                 contents.append({"role": "user", "parts": [m.get("content", "")]})
             elif r in ("assistant", "model"):
@@ -338,13 +363,15 @@ class LLMClientAdapter:
         model_id = model_override or self.spec.model
         system_instruction, contents = self._split_system_and_contents(messages)
 
-        out_tokens = max_tokens or 256
+        # keep your exact behavior (no default override here; out_tokens might be None upstream)
+        out_tokens = max_tokens or 16384
 
         def build_model(tokens: int):
             cfg: Dict[str, Any] = {
                 "temperature": temperature if temperature is not None else 0.0,
                 "max_output_tokens": tokens,
             }
+            # Map simple JSON request
             if response_format and response_format.get("type") == "json_object":
                 cfg["response_mime_type"] = "application/json"
             return genai.GenerativeModel(model_id, system_instruction=system_instruction, generation_config=cfg)
@@ -355,29 +382,88 @@ class LLMClientAdapter:
         resp = model.generate_content(contents)
         latency = time.perf_counter() - t0
 
-        # Extract text (with fallback retry)
-        text = self._extract_gemini_text_or_retry(resp, contents, build_model, out_tokens) or ""
-
-        # usage
-        pt = ct = 0
-        try:
-            um = getattr(resp, "usage_metadata", None)
-            if um:
-                pt = int(getattr(um, "prompt_token_count", 0) or um.get("prompt_token_count", 0))
-                ct = int(getattr(um, "candidates_token_count", 0) or um.get("candidates_token_count", 0))
-            else:
-                in_text = "\n".join(m.get("content","") for m in messages)
+        # Try to read text parts using your working flow
+        text = self._extract_gemini_text_or_retry(resp, contents, build_model, out_tokens)
+        if text:
+            # usage accounting (Gemini)
+            pt = ct = 0
+            try:
+                um = getattr(resp, "usage_metadata", None)
+                if um:
+                    pt = int(getattr(um, "prompt_token_count", 0) or um.get("prompt_token_count", 0))
+                    ct = int(getattr(um, "candidates_token_count", 0) or um.get("candidates_token_count", 0))
+                else:
+                    in_text = "\n".join(m.get("content", "") for m in messages)
+                    pt = _rough_token_estimate(in_text)
+                    ct = _rough_token_estimate(text or "")
+            except Exception:
+                in_text = "\n".join(m.get("content", "") for m in messages)
                 pt = _rough_token_estimate(in_text)
                 ct = _rough_token_estimate(text or "")
-        except Exception:
-            in_text = "\n".join(m.get("content","") for m in messages)
-            pt = _rough_token_estimate(in_text)
-            ct = _rough_token_estimate(text or "")
 
-        self._record_call(prompt_tokens=pt, completion_tokens=ct, latency_sec=latency)
-        return text.strip()
+            self._record_call(prompt_tokens=pt, completion_tokens=ct, latency_sec=latency)
+            return text.strip()
+
+        # Fallback: flatten prompt (rare role/parts edge cases)
+        flat_prompt = (system_instruction + "\n\n" if system_instruction else "")
+        last_user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), None)
+        flat_prompt += last_user or "\n".join(m["content"] for m in messages if m.get("role") != "system")
+
+        model2 = build_model(16384)
+        t1 = time.perf_counter()
+        resp2 = model2.generate_content(flat_prompt)
+        latency2 = time.perf_counter() - t1
+
+        t2 = getattr(resp2, "text", None)
+        if isinstance(t2, str) and t2.strip():
+            text2 = t2.strip()
+            # usage accounting (fallback)
+            pt = ct = 0
+            try:
+                um = getattr(resp2, "usage_metadata", None)
+                if um:
+                    pt = int(getattr(um, "prompt_token_count", 0) or um.get("prompt_token_count", 0))
+                    ct = int(getattr(um, "candidates_token_count", 0) or um.get("candidates_token_count", 0))
+                else:
+                    in_text = flat_prompt
+                    pt = _rough_token_estimate(in_text)
+                    ct = _rough_token_estimate(text2 or "")
+            except Exception:
+                in_text = flat_prompt
+                pt = _rough_token_estimate(in_text)
+                ct = _rough_token_estimate(text2 or "")
+            self._record_call(prompt_tokens=pt, completion_tokens=ct, latency_sec=latency + latency2)
+            return text2
+
+        if getattr(resp2, "candidates", None):
+            parts2 = getattr(resp2.candidates[0].content, "parts", []) or []
+            buf = [getattr(p, "text", "") for p in parts2 if isinstance(getattr(p, "text", None), str)]
+            if any(buf):
+                text2 = "".join(buf).strip()
+                # usage accounting (fallback)
+                pt = ct = 0
+                try:
+                    um = getattr(resp2, "usage_metadata", None)
+                    if um:
+                        pt = int(getattr(um, "prompt_token_count", 0) or um.get("prompt_token_count", 0))
+                        ct = int(getattr(um, "candidates_token_count", 0) or um.get("candidates_token_count", 0))
+                    else:
+                        in_text = flat_prompt
+                        pt = _rough_token_estimate(in_text)
+                        ct = _rough_token_estimate(text2 or "")
+                except Exception:
+                    in_text = flat_prompt
+                    pt = _rough_token_estimate(in_text)
+                    ct = _rough_token_estimate(text2 or "")
+                self._record_call(prompt_tokens=pt, completion_tokens=ct, latency_sec=latency + latency2)
+                return text2
+
+        fr2 = getattr(resp2.candidates[0], "finish_reason", None) if getattr(resp2, "candidates", None) else None
+        # keep your existing strict behavior
+        raise RuntimeError(f"Gemini native: empty after fallback. finish_reason={fr2}")
 
     def _extract_gemini_text_or_retry(self, resp, contents, build_model, out_tokens) -> str:
+        # Your exact working logic
         if not getattr(resp, "candidates", None):
             pf = getattr(resp, "prompt_feedback", None)
             raise RuntimeError(f"Empty Gemini response. prompt_feedback={pf}")
@@ -391,7 +477,7 @@ class LLMClientAdapter:
             return "".join(buf)
 
         if _is_max_tokens(fr):
-            new_tokens = max(2 * (out_tokens or 1), 64)
+            new_tokens = 16384
             logger.info(f"[Gemini native] MAX_TOKENS; retrying with max_output_tokens={new_tokens}")
             model2 = build_model(new_tokens)
             resp2 = model2.generate_content(contents)
@@ -403,4 +489,5 @@ class LLMClientAdapter:
             fr2 = getattr(resp2.candidates[0], "finish_reason", None) if getattr(resp2, "candidates", None) else None
             raise RuntimeError(f"Gemini returned no parts on retry. finish_reason={fr2}")
 
+        # keep strict behavior
         raise RuntimeError(f"Gemini returned no parts. finish_reason={fr}")

@@ -92,6 +92,121 @@ def _apply_vague_time(label: Optional[str], vague_map: Dict[str, Tuple[str,int]]
         return (center, int(tol))
     return (None, None)
 
+def _as_list(x):
+    if x is None or x == "": return []
+    if isinstance(x, list): return x
+    return [x]
+
+def _as_int_list(x):
+    out = []
+    for v in _as_list(x):
+        try:
+            out.append(int(str(v).strip()))
+        except Exception:
+            pass
+    return out
+
+def _as_str_list(x):
+    out = []
+    for v in _as_list(x):
+        s = str(v).strip()
+        if s: out.append(s)
+    return out
+
+def _as_bool(x):
+    if isinstance(x, bool): return x
+    s = str(x).strip().lower()
+    if s in {"true","1","yes","y"}: return True
+    if s in {"false","0","no","n"}: return False
+    return False
+
+def _pad_hhmm(s: str) -> str:
+    # "07:00" -> "07:00:00"
+    if re.match(r"^\d{2}:\d{2}:\d{2}$", s): return s
+    if re.match(r"^\d{2}:\d{2}$", s): return s + ":00"
+    return s
+
+
+def _coerce_time_filters_for_schema(obj: dict) -> dict:
+    """
+    Make a best-effort cast to the types your TIME_JSON_SCHEMA expects.
+    This runs BEFORE validation so that routine LLM shortcuts don't crash validation.
+    """
+    d = dict(obj or {})
+
+    # Arrays of ints/strings
+    d["years"]   = _as_int_list(d.get("years"))
+    d["months"]  = _as_int_list(d.get("months"))
+    d["days"]    = _as_int_list(d.get("days"))
+    d["times"]   = [_pad_hhmm(s) for s in _as_str_list(d.get("times"))]
+    d["weekdays"]= [str(w).strip().upper() for w in _as_str_list(d.get("weekdays"))]
+
+    # Booleans
+    d["weekends"] = _as_bool(d.get("weekends"))
+    d["holidays"] = _as_bool(d.get("holidays"))
+
+    # Date lists
+    d["weekend_dates"] = _as_str_list(d.get("weekend_dates"))
+    d["holiday_dates"] = _as_str_list(d.get("holiday_dates"))
+
+    # Scalars (nullable strings)
+    for k in ("date_start","date_end","start_time","end_time","freq","vague_label","notes","modality"):
+        v = d.get(k)
+        if v is None or v == "": 
+            d[k] = None
+        else:
+            d[k] = str(v)
+
+    # Vague tolerance (nullable int)
+    vtol = d.get("vague_tolerance_minutes")
+    if isinstance(vtol, int):
+        d["vague_tolerance_minutes"] = vtol
+    elif isinstance(vtol, str) and vtol.strip().isdigit():
+        d["vague_tolerance_minutes"] = int(vtol.strip())
+    else:
+        d["vague_tolerance_minutes"] = None
+
+    # single_timestamps (list of strings)
+    d["single_timestamps"] = _as_str_list(d.get("single_timestamps"))
+
+    # timestamp_ranges / date_ranges (list of {start,end} dicts)
+    def _mk_ts_range(x):
+        if isinstance(x, dict):
+            s = x.get("start_time") or x.get("start") or x.get("from") or x.get("timestamp_start")
+            e = x.get("end_time")   or x.get("end")   or x.get("to")   or x.get("timestamp_end")
+        else:
+            s = e = None
+        return {"start_time": (str(s) if s else None), "end_time": (str(e) if e else None)}
+
+    def _mk_date_range(x):
+        if isinstance(x, dict):
+            s = x.get("start_date") or x.get("start") or x.get("from") or x.get("date_start")
+            e = x.get("end_date")   or x.get("end")   or x.get("to")   or x.get("date_end")
+        else:
+            s = e = None
+        return {"start_date": (str(s) if s else None), "end_date": (str(e) if e else None)}
+
+    d["timestamp_ranges"] = [_mk_ts_range(x) for x in _as_list(d.get("timestamp_ranges"))]
+    d["date_ranges"]      = [_mk_date_range(x) for x in _as_list(d.get("date_ranges"))]
+
+    # horizon (object with steps:int|null, units:str|null)
+    h = dict(d.get("horizon") or {})
+    steps_raw = h.get("steps")
+    if isinstance(steps_raw, int):
+        steps_val = steps_raw
+    elif isinstance(steps_raw, str) and steps_raw.strip().isdigit():
+        steps_val = int(steps_raw.strip())
+    else:
+        steps_val = None
+    units_raw = h.get("units")
+    units_val = str(units_raw).lower() if isinstance(units_raw, str) and units_raw.strip() else None
+    if units_val not in {None,"hours","days","weeks","months"}:
+        units_val = None
+    d["horizon"] = {"steps": steps_val, "units": units_val}
+
+    return d
+
+
 
 # -------------------------
 # Lightweight schema + JSON enforcement
@@ -181,6 +296,8 @@ def _chat_json_required(
             obj = _json_salvage(txt)
             if obj is None:
                 raise ValueError("Non-JSON response")
+            
+            obj = _coerce_time_filters_for_schema(obj)
 
             errs = _light_validate(obj, json_schema)
             if not errs:
@@ -202,7 +319,7 @@ def _chat_json_required(
 @dataclass
 class TimeSeriesConfig:
     temperature: float = 0.0
-    max_tokens: int = 2000
+    max_tokens: int = None
     vague_time_map: Dict[str, Tuple[str,int]] = field(default_factory=lambda: DEFAULT_VAGUE_TIME_MAP)
     holiday_fn: Optional[Callable[[date], bool]] = None
     holiday_country: Optional[str] = "AU"
