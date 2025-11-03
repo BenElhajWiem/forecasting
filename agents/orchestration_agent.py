@@ -84,7 +84,8 @@ def orchestration_agent(*,
     print("📥 Data Retrieved", retrieval_out)
 
     # +) Summarization
-    summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
+    #summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
+    summaries=""
     print("📝 Summarizing output", summaries)
 
     # 7) Statistics calculation (structured)

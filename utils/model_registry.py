@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+import os, json, time, logging
+# gRPC + glog/absl
+os.environ["GRPC_VERBOSITY"] = "ERROR"   # DEBUG/INFO/ERROR
+os.environ["GLOG_minloglevel"] = "3"     # 0=INFO,1=WARNING,2=ERROR,3=FATAL
+os.environ["ABSL_MIN_LOG_LEVEL"] = "3"   # absl: 0=INFO,1=WARNING,2=ERROR,3=FATAL
+
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 from dataclasses import dataclass
-import os, json, time, logging
+
 from typing import Optional, Dict, Any, List
 
 from openai import OpenAI
 from openai import BadRequestError 
 
-os.environ["GRPC_VERBOSITY"] = "ERROR"
-os.environ["GLOG_minloglevel"] = "2"
+
 import google.generativeai as genai 
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +340,7 @@ class LLMClientAdapter:
         model_id = model_override or self.spec.model
         system_instruction, contents = self._split_system_and_contents(messages)
 
-        out_tokens = max_tokens
+        out_tokens = max_tokens or 16384
 
         def build_model(tokens: int):
             cfg: Dict[str, Any] = {
@@ -358,7 +365,7 @@ class LLMClientAdapter:
         last_user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), None)
         flat_prompt += last_user or "\n".join(m["content"] for m in messages if m.get("role") != "system")
 
-        model2 = build_model(max(4 * out_tokens, 256))
+        model2 = build_model(16384)
         resp2 = model2.generate_content(flat_prompt)
         t2 = getattr(resp2, "text", None)
         if isinstance(t2, str) and t2.strip():
@@ -394,7 +401,7 @@ class LLMClientAdapter:
 
         # Retry once if we hit MAX_TOKENS with no text parts
         if _is_max_tokens(fr):
-            new_tokens = max(2 * (out_tokens or 1), 64)
+            new_tokens = 16384
             logger.info(f"[Gemini native] MAX_TOKENS; retrying with max_output_tokens={new_tokens}")
             model2 = build_model(new_tokens)
             resp2 = model2.generate_content(contents)
