@@ -37,13 +37,13 @@ class RetrievalConfig:
     include_same_weekday_recent_weeks: bool = True
     same_weekday_recent_weeks: int = 8
 
-    # Mid-term knobs (15 days – 3 months)
+    # Mid-term knobs 
     mid_rolling_weeks_back: int = 12
     mid_same_weekday_hour_profiles_weeks: int = 16
     mid_same_month_prev_years: int = 4
     mid_same_month_buffer_days: int = 7
 
-    # Long-term knobs (> 3 months)
+    # Long-term knobs 
     include_same_woy_prior_years: bool = True
     long_same_month_years: int = 6
     long_same_month_buffer_days: int = 14
@@ -470,20 +470,20 @@ def retrieve_context(
     cfg: RetrievalConfig = RetrievalConfig(),
 ) -> Dict[str, Any]:
     """
-    SHORT_TERM:
+    SHORT_TERM :
       - Recent window equal to horizon span (from freq; fallback 7d)
       - Same-hour previous N days
       - Same-weekday profiles across recent weeks
       - Prior years: same date/time window (tight)
       - Prior years: same week window (±sameweek_days)
 
-    MID_TERM (15d–3mo):
+    MID_TERM :
       - Rolling last W weeks
       - Same weekday/hour profiles across B recent weeks
       - Same month across prior My years (±buffer)
       - Prior years: same week window (±sameweek_days)
 
-    LONG_TERM (>3mo):
+    LONG_TERM :
       - Same month across last Y years (±buffer)
       - Same WoY across last Y years (±tol)
       - Macro trend window (last K years)

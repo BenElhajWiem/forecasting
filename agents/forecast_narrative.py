@@ -145,9 +145,7 @@ def forecast_with_llm(
         "Do NOT fabricate new calculations; rely only on the provided evidence."
         "Base statements only on the provided evidence; do not invent new calculations. "
     )
-
     
-
     user_msg = f"""
 {targets_header}
 

@@ -1,5 +1,5 @@
 from data.data_processing import ElectricityDataLoader
-# from utils.text_utils import clean_tokens_ultra
+from utils.text_utils import clean_tokens_ultra
 
 from agents.redirecting_agent import classify_horizon, HorizonConfig
 from agents.sector_detector import SectorDetector
@@ -8,7 +8,7 @@ from agents.timeseries_features import TimeSeriesFilterExtractor
 from agents.energy_features import EnergyFilterExtractor
 
 from agents.retrieval import retrieve_context, RetrievalConfig
-#from agents.summarization import summarize_from_retrieval_strategy, SummarizeConfig, AnomalyConfig
+from agents.summarization import summarize_from_retrieval_strategy, SummarizeConfig, AnomalyConfig
 from agents.pattern_detection import detect_patterns_with_llm_after_retrieval, PatternConfig
 from agents.statistics_calculation import StatisticalAgent, StatConfig 
 from agents.forecast_narrative import forecast_with_llm, ForecastConfig
@@ -17,26 +17,41 @@ from utils.model_registry import *
 
 from typing import Any, Dict, Optional
 
+RETREIVAL_KEYS = [
+    "recent_window",
+    "same_hour_previous_days",
+    "same_weekday_recent_weeks",
+    "prior_years_same_dates",
+    "prior_years_same_week",
+    "same_woy_prior_years",
+    "same_month_prev_years",
+    "macro_trend_blocks",
+    "combined",
+    "meta"
+]
+
 def orchestration_agent(*,
     user_query: str,
     adapter,                     
     csv_path: str = "data/Final_Data_2025.CSV",
     retrieval_cfg: Optional[RetrievalConfig] = None,
-    # summarize_cfg: Optional[SummarizeConfig] = None,
-    # anomaly_cfg: Optional[AnomalyConfig] = None,
+    summarize_cfg: Optional[SummarizeConfig] = None,
+    anomaly_cfg: Optional[AnomalyConfig] = None,
     pattern_cfg: Optional[PatternConfig] = None,
     narrator_cfg: Optional[ForecastConfig] = None,
     forecast_cfg: Optional[ForecastConfig] = None,
     route_cfg: Optional[HorizonConfig] = None,) -> Dict[str, Any]:
     # defaults
     retrieval_cfg = retrieval_cfg or RetrievalConfig()
-    # summarize_cfg = summarize_cfg or SummarizeConfig()
-    # anomaly_cfg   = anomaly_cfg   or AnomalyConfig()
+    summarize_cfg = summarize_cfg or SummarizeConfig()
+    anomaly_cfg   = anomaly_cfg   or AnomalyConfig()
     pattern_cfg   = pattern_cfg   or PatternConfig()
     narrator_cfg  = narrator_cfg  or ForecastConfig()
     forecast_cfg  = forecast_cfg  or ForecastConfig()
     route_cfg     = route_cfg     or HorizonConfig()
     sector_detector = SectorDetector()
+
+
 
     # 1) Load & preprocess
     loader = ElectricityDataLoader(csv_path)
@@ -68,6 +83,10 @@ def orchestration_agent(*,
     retrieval_out = retrieve_context(df, filters ,route=horizon, cfg=retrieval_cfg)
     print("📥 Data Retrieved", retrieval_out)
 
+    # +) Summarization
+    summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
+    print("📝 Summarizing output", summaries)
+
     # 7) Statistics calculation (structured)
     stats_out = StatisticalAgent(StatConfig(tz="Australia/Sydney")).run(retrieval_out)
     print("📊 Statistics calculated", stats_out)
@@ -79,7 +98,7 @@ def orchestration_agent(*,
     # 8) Forecast
     forecast = forecast_with_llm (
         adapter=adapter, user_query=user_query,
-        summary=None,
+        summary=summaries,
         stats=stats_out,
         patterns=patterns,
         filters=filters,
