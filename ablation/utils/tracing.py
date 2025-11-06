@@ -35,27 +35,55 @@ def jsonable(x: Any, *, max_list: int = 50) -> Any:
     """
     if x is None or isinstance(x, (str, bool, numbers.Number)):
         return x
+    
     if isinstance(x, (list, tuple)):
         return [jsonable(v) for v in x[:max_list]]
+    
     if isinstance(x, dict):
         return {str(k): jsonable(v) for k, v in list(x.items())[:max_list]}
+    
     if isinstance(x, pd.DataFrame):
-        cols = [c for c in x.columns if c in ("SETTLEMENTDATE","REGION","TOTALDEMAND","RRP","ret_block","ret_score")]
-        cols = cols or list(x.columns)[:6]
+        # Keep only informative columns if present, else take first 6
+        cols = [c for c in x.columns if c in (
+            "SETTLEMENTDATE", "REGION", "TOTALDEMAND", "RRP", "ret_block", "ret_score"
+        )]
+        if not cols:
+            cols = list(x.columns)[:6]
+
         def _cell(v):
+            # Convert numpy scalars to native Python
+            if isinstance(v, (np.floating, np.integer)):
+                return float(v) if isinstance(v, np.floating) else int(v)
+            if isinstance(v, (np.bool_,)):
+                return bool(v)
+            # pandas.Timestamp or datetime with tz → ISO
             if hasattr(v, "isoformat"):
-                return v.isoformat()
-            if isinstance(v, (np.floating,)):
-                return float(v)
+                try:
+                    return v.isoformat()
+                except Exception:
+                    try:
+                        return str(v)
+                    except Exception:
+                        return None
             return v
-        return (
-            x.head(20)[cols]
-             .astype(object)
-             .applymap(_cell)
-             .to_dict(orient="records")
-        )
+
+        # Head first to avoid mapping huge frames
+        df_preview = x.head(20).loc[:, cols].astype("object")
+
+        # pandas ≥ 2.2: DataFrame.map exists; older pandas: use applymap
+        if hasattr(pd.DataFrame, "map"):
+            df_preview = df_preview.map(_cell)  # type: ignore[attr-defined]
+        else:
+            df_preview = df_preview.applymap(_cell)  # pragma: no cover for older pandas
+
+        return df_preview.to_dict(orient="records")
+
     if hasattr(x, "isoformat"):
-        return x.isoformat()
+        try:
+            return x.isoformat()
+        except Exception:
+            return str(x)
+
     try:
         return float(x)
     except Exception:
@@ -69,8 +97,9 @@ def topk_by_block(combined: Optional[pd.DataFrame], *, k: int = 100) -> Dict[str
     if combined is None or not isinstance(combined, pd.DataFrame) or combined.empty:
         return {}
     df = combined.copy()
+
     if "ret_score" not in df.columns:
-        df["ret_score"] = 0.0
+        df["ret_score"] = None
     out: Dict[str, list] = {}
     for b in BLOCK_KEYS:
         sub = df[df.get("ret_block") == b].sort_values("ret_score", ascending=False).head(k)

@@ -192,7 +192,8 @@ def run_single(
         "started_ts": started,
         "ended_ts": ended,
         "wall_clock_sec": wall_clock,
-        "tokens": {"in": tokens_in, "out": tokens_out},
+        "tokens": {"in": tokens_in, 
+                   "out": tokens_out},
         "cost_usd": cost_usd,
         "latency_sec": latency_sec,
         "trace": trace_obj or {},
@@ -257,7 +258,6 @@ def write_summary(output_dir: str, csv_path: str):
     }
     with open(os.path.join(output_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-
 
 # ---------------------------------------------------------------------
 # Main

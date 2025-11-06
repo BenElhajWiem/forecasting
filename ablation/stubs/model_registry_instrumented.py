@@ -8,27 +8,21 @@ import os, json, time, logging
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
-from openai import OpenAI
-from openai import BadRequestError
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-
-
-from ablation.utils.cost import estimate_cost  # <-- adjust if your path differs
-
 logger = logging.getLogger(__name__)
 os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GLOG_minloglevel"] = "2"
 
+from openai import OpenAI
+from openai import BadRequestError
+import tiktoken
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+from ablation.utils.cost import estimate_cost  # <-- adjust if your path differs
 
 # -------------------------
 # Helpers
 # -------------------------
-def _rough_token_estimate(txt: str) -> int:
-    if not isinstance(txt, str):
-        return 0
-    return max(1, int(len(txt) / 4))
-
 def _json_loads_loose(s: str) -> Dict[str, Any]:
     s = (s or "").strip()
     try:
@@ -74,6 +68,31 @@ def _is_max_tokens(fr: Any) -> bool:
     if isinstance(fr, int) and fr == 2: return True
     return False
 
+
+# -------------------------
+# Token counting helpers
+# -------------------------
+def count_tokens_tiktoken(text: str, model: str = "gpt-4o-mini") -> int:
+    """
+    Accurate token counter using tiktoken with fallback.
+    Works even if model is not officially supported by OpenAI tokenizer.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return 0
+    try:
+        # Try tokenizer specific to the model
+        enc = tiktoken.encoding_for_model(model)
+    except KeyError:
+        # Fallback to a generic encoding
+        enc = tiktoken.get_encoding("cl100k_base")
+    try:
+        return len(enc.encode(text))
+    except Exception:
+        # Final fallback if encoding fails
+        return max(1, len(text) // 4)
+
+def _rough_token_estimate(txt: str, model: str = "gpt-4o-mini") -> int:
+    return count_tokens_tiktoken(txt, model=model)
 
 # -------------------------
 # Registry
@@ -219,6 +238,9 @@ class LLMClientAdapter:
             "cost_usd": float(cost),
         })
 
+
+
+
     # ---- public chat APIs ----
     def chat(
         self,
@@ -306,12 +328,12 @@ class LLMClientAdapter:
                 ct = int(getattr(ui, "completion_tokens", 0) or ui.get("completion_tokens", 0))
             else:
                 in_text = "\n".join(m.get("content", "") for m in messages)
-                pt = _rough_token_estimate(in_text)
-                ct = _rough_token_estimate(out_text or "")
+                pt = _rough_token_estimate(in_text, model=self.spec.model)
+                ct = _rough_token_estimate(out_text or "", model=self.spec.model)
         except Exception:
             in_text = "\n".join(m.get("content", "") for m in messages)
-            pt = _rough_token_estimate(in_text)
-            ct = _rough_token_estimate(out_text or "")
+            pt = _rough_token_estimate(in_text, model=self.spec.model)
+            ct = _rough_token_estimate(out_text or "", model=self.spec.model)
 
         self._record_call(prompt_tokens=pt, completion_tokens=ct, latency_sec=latency)
         return (out_text or "").strip()

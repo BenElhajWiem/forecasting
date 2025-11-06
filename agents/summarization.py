@@ -12,12 +12,12 @@ from datetime import timedelta
 @dataclass
 class SummarizeConfig:
     model: str = None             # default; adapter can override per call
-    temperature: float = 0.2
+    temperature: float = 0.0
     max_tokens_out: int = None               # small, deterministic JSON
-    target_tokens_per_chunk: int = 500      # rough input budget per chunk
-    hard_max_rows_per_chunk: int = 1200     # guardrail
+    target_tokens_per_chunk: int = 60_000      
+    hard_max_rows_per_chunk: int = None     # guardrail
     time_chunk_hours: Optional[int] = 24  # if set, chunk by time windows
-    row_chunk_size_fallback: int = 600     # if not time chunking
+    row_chunk_size_fallback: int = None     # if not time chunking
     json_mode: bool = True
     tz: str = "Australia/Sydney"
     model_override: Optional[str] = None    # force model for this stage if needed
