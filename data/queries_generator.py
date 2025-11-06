@@ -129,8 +129,8 @@ def generate_hourly():
         (48, "48-hour every 2 hours forecast")
     ]
     templates = [
-        "Generate a {desc} for TOTALDEMAND and RRP in {region_name} ({region_code}) starting {iso}.",
-        "Forecast {desc} for {region_name} ({region_code}), beginning at {iso}, including TOTALDEMAND and RRP."
+        "Generate a {desc} for TOTALDEMAND and RRP in {region_name} starting {iso}.",
+        "Forecast {desc} for {region_name}, beginning at {iso}, including TOTALDEMAND and RRP."
     ]
 
     queries, qid = [], 1

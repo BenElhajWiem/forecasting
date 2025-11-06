@@ -81,20 +81,20 @@ def orchestration_agent(*,
 
     # 6) Retrieval
     retrieval_out = retrieve_context(df, filters ,route=horizon, cfg=retrieval_cfg)
-    print("📥 Data Retrieved", retrieval_out)
+    print("📥 Data Retrieved")
 
     # +) Summarization
-    #summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
-    summaries=""
-    print("📝 Summarizing output", summaries)
+    summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
+    #summaries=""
+    print("📝 Summarization Done")
 
     # 7) Statistics calculation (structured)
     stats_out = StatisticalAgent(StatConfig(tz="Australia/Sydney")).run(retrieval_out)
-    print("📊 Statistics calculated", stats_out)
+    print("📊 Statistics calculated")
 
     # 8) Pattern detection (numeric detectors + LLM narrator)
     patterns = detect_patterns_with_llm_after_retrieval(adapter, retrieval_out=retrieval_out)
-    print("🧩 Pattern detection",patterns["llm_patterns"]["recent_window"])
+    print("🧩 Pattern detection Done")
 
     # 8) Forecast
     forecast = forecast_with_llm (

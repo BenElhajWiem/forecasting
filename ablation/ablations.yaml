@@ -8,10 +8,10 @@ global:
 
 experiments:
   # Full model per provider
-  - id: FULL_gemini
-    setup: { model: "gemini-flash-native", sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
   - id: FULL_deepseek
     setup: { model: "deepseek-chat",        sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
+  - id: FULL_gemini
+    setup: { model: "gemini-flash-native", sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
   - id: FULL_openai
     setup: { model: "openai-mini",          sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
   - id: FULL_claude
