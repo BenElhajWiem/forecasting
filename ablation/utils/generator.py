@@ -27,7 +27,7 @@ BIN_SEQUENCE = list(TIME_BINS.keys())
 
 # -------------------- Helper functions --------------------
 
-def fmt_iso(dt): return dt.strftime("%Y-%m-%dT%H:%M:%S")
+def fmt_iso(dt): return dt.strftime("%Y/%m/%d %H:%M:%S")
 def fmt_nice(dt): return dt.strftime("%B %d, %Y at %H:%M")
 
 def apply_time_bin(base_date, bin_name, rng):
@@ -88,7 +88,7 @@ def generate_daily():
     cycle = ["both", "demand", "price"]
 
     # evenly sample 25 slots across regions/horizons
-    total_needed = 25
+    total_needed = 12
     slots_per_region = total_needed // len(REGIONS)
     extra = total_needed % len(REGIONS)
 
@@ -112,7 +112,9 @@ def generate_daily():
                 "timestamp": iso, "hour_bin": bin_name
             })
             qid += 1
-    return queries[:25]
+    rng = random.Random(123)
+    selected = rng.sample(queries,12)
+    return selected
 
 
 # -------------------- HOURLY QUERY GENERATOR (25 queries) --------------------
@@ -136,7 +138,7 @@ def generate_hourly():
 ]
 
     queries, qid = [], 1
-    total_needed = 25
+    total_needed = 13
     slots_per_region = total_needed // len(REGIONS)
     extra = total_needed % len(REGIONS)
 
@@ -161,7 +163,9 @@ def generate_hourly():
                 "horizon_hint": "short_term", "start_hour_bin": bin_name
             })
             qid += 1
-    return queries[:25]
+    rng = random.Random(123)
+    selected = rng.sample(queries,13)
+    return selected
 
 
 if __name__ == "__main__":

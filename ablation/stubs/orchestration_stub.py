@@ -317,11 +317,11 @@ def orchestration_agent(*,
                     main_answer = forecast[k]
                     break
 
-        trace["forecast"] = jsonable({"answer": main_answer})
-        forecast["trace"] = trace
-    return forecast
+            trace["forecast"] = jsonable({"answer": main_answer})
+            forecast["trace"] = trace
+        return forecast
 
-    # Fallback if forecaster returned non-dict
+# Fallback if forecaster returned non-dict
     return {
         "tokens_in": tin,
         "tokens_out": tout,
