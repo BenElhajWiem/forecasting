@@ -3,64 +3,267 @@ global:
   backtest:
     start: "2025-04-30"
     end:   "2025-07-30"
-    freq: "1M"           # doc only — splits are built in backtesting.py
+    freq: "1M"           # Monthly backtest frequency
     warmup_months: 1
 
-experiments:
-  # Full model per provider
+# ==========================
+# DeepSeek experiments
+# ==========================
+
+experiments_deepseek:
+
+  - id: QUERY_ONLY_deepseek
+    seeds: [7]
+    setup:
+      model: "deepseek-chat"
+      direct_forecast_only: true
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "off"
+      pattern_detection: false
+      summarization: "off"
+
   - id: FULL_deepseek
-    setup: { model: "deepseek-chat",        sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: FULL_gemini
-    setup: { model: "gemini-flash-native", sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
+    setup:
+      model: "deepseek-chat"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_horizon_deepseek
+    seeds: [7]
+    setup:
+      model: "deepseek-chat"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_stats_deepseek
+    seeds: [7]
+    setup:
+      model: "deepseek-chat"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_pattern_deepseek
+    seeds: [7]
+    setup:
+      model: "deepseek-chat"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"
+
+  - id: L1_summarizer_deepseek
+    seeds: [7]
+    setup:
+      model: "deepseek-chat"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"
+
+# ==========================
+# OpenAI experiments
+# ==========================
+experiments_openai:
+
+  - id: QUERY_ONLY_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      direct_forecast_only: true
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "off"
+      pattern_detection: false
+      summarization: "off"
+
   - id: FULL_openai
-    setup: { model: "openai-mini",          sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_horizon_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_stats_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_pattern_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"
+
+  - id: L1_summarizer_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"
+
+# ==========================
+# Gemini experiments
+# ==========================
+experiments_gemini:
+
+  - id: QUERY_ONLY_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      direct_forecast_only: true
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "off"
+      pattern_detection: false
+      summarization: "off"
+
+  - id: FULL_gemini
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_horizon_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_stats_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_pattern_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"
+
+  - id: L1_summarizer_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"
+
+# ==========================
+# Claude experiments
+# ==========================
+
+experiments_claude:
+
+  - id: QUERY_ONLY_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      direct_forecast_only: true
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "off"
+      pattern_detection: false
+      summarization: "off"
+
   - id: FULL_claude
-    setup: { model: "claude-api",           sector_detector: true, horizon_classifier: true, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
 
-  # Leave-one-agent for Gemini
-  - id: L1_sector_gemini
-    setup: { model: "gemini-flash-native", sector_detector: false, horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_horizon_gemini
-    setup: { model: "gemini-flash-native", sector_detector: true,  horizon_classifier: false, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_stats_gemini
-    setup: { model: "gemini-flash-native", sector_detector: true,  horizon_classifier: true,  stats_mode: "off",         pattern_detection: true, summarization: "16sent" }
-  - id: L1_pattern_gemini
-    setup: { model: "gemini-flash-native", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: false, summarization: "16sent" }
-  - id: L1_summarizer_gemini
-    setup: { model: "gemini-flash-native", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true,  summarization: "off" }
+  - id: L1_horizon_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
 
-# Leave-one-agent for DeepSeek
-  - id: L1_sector_gemini
-    setup: { model: "deepseek-chat", sector_detector: false, horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_horizon_gemini
-    setup: { model: "deepseek-chat", sector_detector: true,  horizon_classifier: false, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_stats_gemini
-    setup: { model: "deepseek-chat", sector_detector: true,  horizon_classifier: true,  stats_mode: "off",         pattern_detection: true, summarization: "16sent" }
-  - id: L1_pattern_gemini
-    setup: { model: "deepseek-chat", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: false, summarization: "16sent" }
-  - id: L1_summarizer_gemini
-    setup: { model: "deepseek-chat", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true,  summarization: "off" }
+  - id: L1_stats_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
 
-  # Leave-one-agent for Claude
-  - id: L1_sector_gemini
-    setup: { model: "claude-api", sector_detector: false, horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_horizon_gemini
-    setup: { model: "claude-api", sector_detector: true,  horizon_classifier: false, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_stats_gemini
-    setup: { model: "claude-api", sector_detector: true,  horizon_classifier: true,  stats_mode: "off",         pattern_detection: true, summarization: "16sent" }
-  - id: L1_pattern_gemini
-    setup: { model: "claude-api", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: false, summarization: "16sent" }
-  - id: L1_summarizer_gemini
-    setup: { model: "claude-api", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true,  summarization: "off" }
+  - id: L1_pattern_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"
 
-  # Leave-one-agent for OpenAI
-  - id: L1_sector_gemini
-    setup: { model: "openai-mini", sector_detector: false, horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_horizon_gemini
-    setup: { model: "openai-mini", sector_detector: true,  horizon_classifier: false, stats_mode: "summary_acf", pattern_detection: true, summarization: "16sent" }
-  - id: L1_stats_gemini
-    setup: { model: "openai-mini", sector_detector: true,  horizon_classifier: true,  stats_mode: "off",         pattern_detection: true, summarization: "16sent" }
-  - id: L1_pattern_gemini
-    setup: { model: "openai-mini", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: false, summarization: "16sent" }
-  - id: L1_summarizer_gemini
-    setup: { model: "openai-mini", sector_detector: true,  horizon_classifier: true,  stats_mode: "summary_acf", pattern_detection: true,  summarization: "off" }
+  - id: L1_summarizer_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"

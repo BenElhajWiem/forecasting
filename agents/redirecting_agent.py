@@ -9,7 +9,7 @@ from datetime import datetime
 class HorizonConfig:
     # Boundaries (in days)
     short_days: int = 2        # <= short_days  => short_term
-    long_days: int = 30        # >  long_days   => long_term (else mid_term)
+    long_days: int = 60        # >  long_days   => long_term (else mid_term)
 
     # Data column config (domain-agnostic)
     timestamp_col: str = "timestamp"           # column holding timestamps

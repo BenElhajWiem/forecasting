@@ -21,7 +21,6 @@ from agents.pattern_detection import detect_patterns_with_llm_after_retrieval, P
 from agents.statistics_calculation import StatisticalAgent, StatConfig
 from agents.forecast_narrative import forecast_with_llm, ForecastConfig
 
-
 # -----------------------------------------
 # Optional: block-level filtering for ablations
 # -----------------------------------------
@@ -80,7 +79,7 @@ def _filter_retrieval_blocks(
 def orchestration_agent(*,
     user_query: str,
     adapter,                     # instrumented or vanilla adapter
-    csv_path: str = "data/Final_Data_2025.CSV",
+    csv_path: str = "data/data.csv",
 
     # Configs
     retrieval_cfg: Optional[RetrievalConfig] = None,
@@ -101,6 +100,7 @@ def orchestration_agent(*,
     use_statistics_agent: bool = True,
     use_pattern_agent: bool = True,
     use_summarizer: bool = True,
+    direct_forecast_only: bool = False,
 
     # Optional block selection for retrieval ablations
     retrieval_blocks: Optional[Dict[str, Any]] = None,
@@ -130,7 +130,106 @@ def orchestration_agent(*,
             pass
 
     t_all = Timer()
-    trace: Dict[str, Any] = {"timings_ms": {}}
+    trace: Dict[str, Any] = {"timings_ms": {}, "mode": "full_pipeline"}
+
+    # -------------------------------------------------
+    # Direct-forecast-only ablation:
+    # -------------------------------------------------
+
+    if direct_forecast_only:
+        
+        trace["mode"] = "direct_forecast_only"
+        trace["sector"] = None
+        trace["horizon"] = "direct"
+        trace["now_iso"] = None
+        trace["filters"] = jsonable({})
+        trace["retrieval"] = {
+            "meta": jsonable({}),
+            "blocks_topk": {},
+        }
+        trace["statistics"] = jsonable(None)
+        trace["patterns"] = jsonable({})
+
+        # Forecast only
+        t = Timer()
+        if hasattr(adapter, "stage"):
+            with adapter.stage("forecast"):
+                forecast = forecast_with_llm(
+                    adapter=adapter,
+                    user_query=user_query,
+                    summary=None,
+                    stats=None,
+                    patterns=None,
+                    filters={},
+                    cfg=forecast_cfg,
+                    route=None,
+                )
+        else:
+            forecast = forecast_with_llm(
+                adapter=adapter,
+                user_query=user_query,
+                summary=None,
+                stats=None,
+                patterns=None,
+                filters={},
+                cfg=forecast_cfg,
+                route=None,
+            )
+        trace["timings_ms"]["forecast"] = t.ms()
+        trace["timings_ms"]["total"] = t_all.ms()
+
+        # Tokens and LLM-call accounting
+        usage: Dict[str, Any] = {}
+        totals: Dict[str, Any] = {}
+        calls: list = []
+
+        if hasattr(adapter, "usage"):
+            try:
+                usage = adapter.usage()
+            except Exception:
+                pass
+        if hasattr(adapter, "totals"):
+            try:
+                totals = adapter.totals()
+            except Exception:
+                pass
+        if hasattr(adapter, "call_log"):
+            try:
+                calls = adapter.call_log()
+            except Exception:
+                pass
+
+        tin = float(usage.get("in", 0.0))
+        tout = float(usage.get("out", 0.0))
+        trace["tokens"] = {"in": tin, "out": tout}
+        if calls:
+            trace["llm_calls"] = calls
+        if totals:
+            trace["llm_totals"] = totals  # {"tokens_in","tokens_out","cost_usd","latency_sec"}
+
+        # Attach trace and return forecast
+        if isinstance(forecast, dict):
+            forecast.setdefault("tokens_in", tin)
+            forecast.setdefault("tokens_out", tout)
+            if return_trace:
+                main_answer = None
+                for k in ("point", "forecast", "answer", "text", "value"):
+                    if k in forecast:
+                        main_answer = forecast[k]
+                        break
+                trace["forecast"] = jsonable({"answer": main_answer})
+                forecast["trace"] = trace
+            return forecast
+
+        # Fallback if forecast isn't a dict
+        return {
+            "tokens_in": tin,
+            "tokens_out": tout,
+            "trace": trace if return_trace else {},
+        }
+    # =========================================================
+    # FULL PIPELINE PATH (normal behaviour with toggles)
+    # =========================================================
 
     # 1) Load & preprocess
     t = Timer()
@@ -152,8 +251,10 @@ def orchestration_agent(*,
 
     # 3) Horizon classification
     t = Timer()
-    hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", reference_time="2025/04/01 00:00:00")
-    horizon = "short_term"
+    hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", 
+                         reference_time="2025/05/01 00:00:00")
+    
+    horizon = "mid_term"
     if use_horizon_classifier:
         if hasattr(adapter, "stage"):
             with adapter.stage("horizon"):
@@ -184,7 +285,7 @@ def orchestration_agent(*,
     trace["filters"] = jsonable(filters)
     trace["timings_ms"]["feature_extract"] = t.ms()
 
-    # 6) Retrieval (no LLM)
+    # 6) Retrieval of context
     t = Timer()
     retrieval_out = retrieve_context(df, filters, route=horizon, cfg=retrieval_cfg)
     trace["timings_ms"]["retrieval"] = t.ms()

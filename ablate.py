@@ -9,7 +9,7 @@ os.environ["GRPC_VERBOSITY"] = "ERROR"       # Only errors from gRPC
 os.environ["GLOG_minloglevel"] = "3"         # 0=INFO,1=WARNING,2=ERROR,3=FATAL
 os.environ["ABSL_MIN_LOG_LEVEL"] = "3"       # Suppress absl info/warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"     # (optional) silence TensorFlow if imported
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"  # avoids some C++ log spam
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"  
 
 # silence grpc & absl loggers inside Python
 logging.getLogger("grpc").setLevel(logging.ERROR)
@@ -125,6 +125,7 @@ def run_single(
         "use_statistics_agent",
         "use_pattern_agent",
         "use_summarizer",
+        "direct_forecast_only",
     ):
         if k in exp_setup:
             orch_kwargs[k] = bool(exp_setup[k])
@@ -219,7 +220,11 @@ def run_single(
         "region_name": region_name,
         "horizon_hint": horizon_hint,
         "timestamp": start_ts,
-        "answer": main_answer if isinstance(main_answer, (str, int, float)) else json.dumps(main_answer),
+        "answer": (
+            main_answer
+            if isinstance(main_answer, (str, int, float))
+            else json.dumps(main_answer)
+        ),
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
         "cost_usd": cost_usd,
@@ -239,13 +244,18 @@ def run_single(
 # ---------------------------------------------------------------------
 def write_summary(output_dir: str, csv_path: str):
     import pandas as pd
+
     if not os.path.exists(csv_path):
         return
     df = pd.read_csv(csv_path)
     if df.empty:
         return
-    def safe_sum(c): return float(df[c].fillna(0).sum())
-    def safe_mean(c): return float(df[c].astype(float).replace([np.inf, -np.inf], np.nan).dropna().mean() or 0.0)
+    
+    def safe_sum(c): 
+        return float(df[c].fillna(0).sum())
+    
+    def safe_mean(c): 
+        return float(df[c].astype(float).replace([np.inf, -np.inf], np.nan).dropna().mean() or 0.0)
 
     summary = {
         "num_runs": len(df),
@@ -264,14 +274,20 @@ def write_summary(output_dir: str, csv_path: str):
 # ---------------------------------------------------------------------
 def main() -> int:
     cfg = load_yaml(DEFAULT_YAML)
-    seeds = cfg.get("global", {}).get("seeds", [7, 21, 42, 63, 84])
+    global_seeds = cfg.get("global", {}).get("seeds", [7, 21, 42, 63, 84])
     queries = load_queries(DEFAULT_QUERIES)
     log.info(f"Loaded {len(queries)} queries from {DEFAULT_QUERIES}")
 
     registry = InstrumentedRegistry()
-    experiments = cfg.get("experiments", [])
+
+    # Collect experiments from per-model groups
+    experiments: List[Dict[str, Any]] = []
+    for key, value in cfg.items():
+        if key.startswith("experiments") and isinstance(value, list):
+            experiments.extend(value)
+
     if not experiments:
-        log.error("No experiments found in ablation/ablations.yaml")
+        log.error("No experiments found in ablation/ablations.yaml (expected keys like 'experiments_deepseek', 'experiments_openai', etc.)")
         return 2
 
     csv_fields = [
@@ -288,7 +304,12 @@ def main() -> int:
             log.warning(f"Experiment {exp_id} missing 'model'; skipping.")
             continue
 
+        # Per-experiment seeds: default to global if not specified
+        exp_seeds = exp.get("seeds", global_seeds)
+
         mapped_setup = {}
+        if "direct_forecast_only" in setup:
+            mapped_setup["direct_forecast_only"] = bool(setup["direct_forecast_only"])
         if "sector_detector" in setup:
             mapped_setup["use_sector_detector"] = bool(setup["sector_detector"])
         if "horizon_classifier" in setup:
@@ -310,7 +331,7 @@ def main() -> int:
         log.info(f"=== Running experiment {exp_id} with model={model_name} ===")
 
         try:
-            for seed in seeds:
+            for seed in exp_seeds:
                 for q in queries:
                     run_single(
                         exp_id=exp_id,
