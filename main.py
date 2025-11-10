@@ -30,10 +30,10 @@ from agents.orchestration_agent import orchestration_agent
 
 def main():
     registry = Registry()
-    spec = registry.presets["deepseek-chat"] # "gemini-flash-native" | "deepseek-chat"
+    spec = registry.presets["deepseek-chat"] # "gemini-flash-native" | "deepseek-chat" | "openai-mini"
     adapter = LLMClientAdapter(spec)
 
-    user_query = "Predict the TOTALDEMAND and RRP for NSW on 19th of June , 2025 at 23:30."
+    user_query = "Forecast 48-hour every 2 hours forecast for QLD (QLD1), beginning at July 01, 2025 at 20:30, including TOTALDEMAND and RRP."
     result = orchestration_agent(user_query=user_query, adapter=adapter)
 
 if __name__ == "__main__":

@@ -84,8 +84,8 @@ def orchestration_agent(*,
     print("📥 Data Retrieved")
 
     # +) Summarization
-    summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
-    #summaries=""
+    #summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
+    summaries=""
     print("📝 Summarization Done")
 
     # 7) Statistics calculation (structured)
@@ -93,8 +93,9 @@ def orchestration_agent(*,
     print("📊 Statistics calculated")
 
     # 8) Pattern detection (numeric detectors + LLM narrator)
-    patterns = detect_patterns_with_llm_after_retrieval(adapter, retrieval_out=retrieval_out)
+    #patterns = detect_patterns_with_llm_after_retrieval(adapter, retrieval_out=retrieval_out)
     print("🧩 Pattern detection Done")
+    patterns=""
 
     # 8) Forecast
     forecast = forecast_with_llm (
