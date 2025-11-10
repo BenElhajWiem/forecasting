@@ -33,7 +33,7 @@ RETREIVAL_KEYS = [
 def orchestration_agent(*,
     user_query: str,
     adapter,                     
-    csv_path: str = "data/Final_Data_2025.CSV",
+    csv_path: str = "data/data.csv",
     retrieval_cfg: Optional[RetrievalConfig] = None,
     summarize_cfg: Optional[SummarizeConfig] = None,
     anomaly_cfg: Optional[AnomalyConfig] = None,
