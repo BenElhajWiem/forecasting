@@ -36,13 +36,16 @@ def _normalize_freq(freq_raw: Optional[str]) -> Optional[str]:
     if not freq_raw: return None
     s = str(freq_raw).strip().lower()
     alias = {
-        "15":"15min","15m":"15min","15 min":"15min","15mins":"15min","15 minutes":"15min",
-        "quarter hour":"15min","quarter-hour":"15min",
-        "30":"30min","30m":"30min","30 min":"30min","30mins":"30min","30 minutes":"30min",
-        "half hour":"30min","half-hour":"30min",
-        "h":"1H","1h":"1H","1hr":"1H","hour":"1H","hourly":"1H","per hour":"1H","hrs":"1H",
-        "d":"1D","1d":"1D","day":"1D","daily":"1D","per day":"1D"
-    }
+    "5":"5min","5m":"5min","5 min":"5min","5mins":"5min","5 minutes":"5min",
+    "20":"20min","20m":"20min","20 min":"20min","20mins":"20min","20 minutes":"20min",
+    "15":"15min","15m":"15min","15 min":"15min","15mins":"15min","15 minutes":"15min",
+    "quarter hour":"15min","quarter-hour":"15min",
+    "30":"30min","30m":"30min","30 min":"30min","30mins":"30min","30 minutes":"30min",
+    "half hour":"30min","half-hour":"30min",
+    "h":"1H","1h":"1H","1hr":"1H","hour":"1H","hourly":"1H","per hour":"1H","hrs":"1H",
+    "d":"1D","1d":"1D","day":"1D","daily":"1D","per day":"1D"
+}
+
     if s in alias: return alias[s]
     m = re.match(r"^\s*(\d+)\s*(h|hr|hrs|hour|hours)\s*$", s)
     if m: return f"{int(m.group(1))}H"
@@ -190,7 +193,21 @@ def _coerce_time_filters_for_schema(obj: dict) -> dict:
     d["date_ranges"]      = [_mk_date_range(x) for x in _as_list(d.get("date_ranges"))]
 
     # horizon (object with steps:int|null, units:str|null)
-    h = dict(d.get("horizon") or {})
+    hz = d.get("horizon")
+    if isinstance(hz, dict):
+        h = hz
+    elif isinstance(hz, str):
+        h = {"hint": hz}
+    elif isinstance(hz, (list, tuple)) and hz:
+        # handle cases like ["short_term"] or [{"hint":"short_term"}]
+        if isinstance(hz[0], dict):
+            h = hz[0]
+        elif isinstance(hz[0], str):
+            h = {"hint": hz[0]}
+        else:
+            h = {}
+    else:
+        h = {}
     steps_raw = h.get("steps")
     if isinstance(steps_raw, int):
         steps_val = steps_raw
