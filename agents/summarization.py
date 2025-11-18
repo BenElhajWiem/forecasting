@@ -11,12 +11,12 @@ from datetime import timedelta
 # -----------------------------------------------------------
 @dataclass
 class SummarizeConfig:
-    model: str = None             # default; adapter can override per call
+    model: str = None       
     temperature: float = 0.0
-    max_tokens_out: int = None               # small, deterministic JSON
+    max_tokens_out: int = None               
     target_tokens_per_chunk: int = 60_000      
-    hard_max_rows_per_chunk: int = None     # guardrail
-    time_chunk_hours: Optional[int] = 24  # if set, chunk by time windows
+    hard_max_rows_per_chunk: int = 5000     
+    time_chunk_hours: Optional[int] = 24  
     row_chunk_size_fallback: int = None     # if not time chunking
     json_mode: bool = True
     tz: str = "Australia/Sydney"
@@ -32,6 +32,7 @@ class AnomalyConfig:
 # Utilities
 # -----------------------------------------------------------
 def _coerce_ts_local(series: pd.Series, tz: str) -> pd.Series:
+    """Parse to datetime and localize if naive."""
     s = pd.to_datetime(series, errors="coerce", utc=False)
     if getattr(s.dt, "tz", None) is None:
         s = s.dt.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
@@ -48,6 +49,10 @@ def _df_to_compact_csv(df: pd.DataFrame, max_rows: int = 1000) -> str:
     return slim.to_csv(index=False)
 
 def _dict_compact(d: Dict[str, Any], max_chars: int = 6000) -> str:
+    """
+    JSON-encode a dict; if too long, try to shrink long lists; if that fails,
+    hard truncate.
+    """
     s = json.dumps(d, ensure_ascii=False, default=str)
     if len(s) <= max_chars:
         return s
@@ -327,8 +332,8 @@ def summarize_from_retrieval_strategy(
         "recent_window",
         "prior_years_same_dates",
         "prior_years_same_week",
-        "same_hour_previous_days",    # NEW
-        "same_woy_prior_years",       # NEW
+        "same_hour_previous_days",  
+        "same_woy_prior_years",      
     ]
 
     present = {

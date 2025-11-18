@@ -43,13 +43,6 @@ class ElectricityDataLoader:
             self.df["SETTLEMENTDATE"], format='mixed', errors='coerce'
         )
 
-        # Create datetime-related features
-        self.df["DATE"] = self.df["SETTLEMENTDATE"].dt.date
-        self.df["TIME"] = self.df["SETTLEMENTDATE"].dt.time
-        self.df["YEAR"] = self.df["SETTLEMENTDATE"].dt.year
-        self.df["MONTH"] = self.df["SETTLEMENTDATE"].dt.month
-        self.df["DAY"] = self.df["SETTLEMENTDATE"].dt.day
-
         return self.df
 
     def load_and_preprocess(self) -> pd.DataFrame:

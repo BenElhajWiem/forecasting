@@ -1,11 +1,9 @@
-# ablation/stubs/orchestration_stub.py
-# Instrumented orchestration that mirrors the real pipeline but returns a rich TRACE.
 from __future__ import annotations
-from typing import Any, Dict, Optional, Iterable
+from typing import Any, Dict, Optional
 import pandas as pd
 
 # --- Tracing helpers ---
-from ablation.utils.tracing import Timer, jsonable, topk_by_block, BLOCK_KEYS
+from ablation.utils.tracing import Timer, jsonable, topk_by_block
 
 # --- Real agents / configs ---
 from data.data_processing import ElectricityDataLoader
@@ -22,64 +20,12 @@ from agents.statistics_calculation import StatisticalAgent, StatConfig
 from agents.forecast_narrative import forecast_with_llm, ForecastConfig
 
 # -----------------------------------------
-# Optional: block-level filtering for ablations
-# -----------------------------------------
-def _filter_retrieval_blocks(
-    retrieval_out: Dict[str, Any],
-    include: Optional[Iterable[str]] = None,
-    exclude: Optional[Iterable[str]] = None,
-    topk_per_block: Optional[int] = None,
-) -> Dict[str, Any]:
-    """Return a shallow-copied retrieval_out with 'combined' & 'meta' filtered to chosen blocks."""
-    ro = dict(retrieval_out)  # shallow copy ok
-    combined: pd.DataFrame = ro.get("combined", pd.DataFrame())
-
-    inc = set(include) if include else set(BLOCK_KEYS)
-    exc = set(exclude) if exclude else set()
-    keep_blocks = [b for b in BLOCK_KEYS if (b in inc) and (b not in exc)]
-
-    # If nothing to filter or no data, just update meta counts to reflect selection
-    if not isinstance(combined, pd.DataFrame) or combined.empty:
-        meta = dict(ro.get("meta", {}))
-        counts = {k: (int(len(ro.get(k, []))) if (k in keep_blocks) else 0) for k in BLOCK_KEYS}
-        meta["counts"] = counts
-        meta["total_after_merge"] = 0
-        meta["filtered_blocks"] = {"include": sorted(list(inc)), "exclude": sorted(list(exc))}
-        ro["meta"] = meta
-        return ro
-
-    # Keep only selected blocks
-    filtered = combined[combined["ret_block"].isin(keep_blocks)].copy()
-
-    # Optional: per-block top-K by ret_score
-    if topk_per_block and "ret_score" in filtered.columns:
-        filtered = (
-            filtered.sort_values(["ret_block", "ret_score"], ascending=[True, False])
-                    .groupby("ret_block", as_index=False, group_keys=False)
-                    .head(topk_per_block)
-        )
-
-    # Update meta counts
-    meta = dict(ro.get("meta", {}))
-    counts = {}
-    for b in BLOCK_KEYS:
-        counts[b] = int(len(filtered[filtered["ret_block"] == b])) if b in keep_blocks else 0
-
-    meta["counts"] = counts
-    meta["total_after_merge"] = int(len(filtered))
-    meta["filtered_blocks"] = {"include": sorted(list(inc)), "exclude": sorted(list(exc))}
-    ro["meta"] = meta
-    ro["combined"] = filtered
-    return ro
-
-
-# -----------------------------------------
-# Instrumented orchestration (stub)
+# Instrumented orchestration 
 # -----------------------------------------
 def orchestration_agent(*,
     user_query: str,
-    adapter,                     # instrumented or vanilla adapter
-    csv_path: str = "data/data.csv",
+    adapter,                     
+    csv_path: str = "data/processed_data.csv",
 
     # Configs
     retrieval_cfg: Optional[RetrievalConfig] = None,
@@ -137,7 +83,6 @@ def orchestration_agent(*,
     # -------------------------------------------------
 
     if direct_forecast_only:
-        
         trace["mode"] = "direct_forecast_only"
         trace["sector"] = None
         trace["horizon"] = "direct"
@@ -184,24 +129,19 @@ def orchestration_agent(*,
         calls: list = []
 
         if hasattr(adapter, "usage"):
-            try:
-                usage = adapter.usage()
-            except Exception:
-                pass
+            try: usage = adapter.usage()
+            except Exception: pass
         if hasattr(adapter, "totals"):
-            try:
-                totals = adapter.totals()
-            except Exception:
-                pass
+            try: totals = adapter.totals()
+            except Exception: pass
         if hasattr(adapter, "call_log"):
-            try:
-                calls = adapter.call_log()
-            except Exception:
-                pass
+            try: calls = adapter.call_log()
+            except Exception: pass
 
         tin = float(usage.get("in", 0.0))
         tout = float(usage.get("out", 0.0))
         trace["tokens"] = {"in": tin, "out": tout}
+
         if calls:
             trace["llm_calls"] = calls
         if totals:
@@ -214,23 +154,26 @@ def orchestration_agent(*,
             if return_trace:
                 main_answer = None
                 for k in ("point", "forecast", "answer", "text", "value"):
-                    if k in forecast:
-                        main_answer = forecast[k]
+                    v = forecast.get(k)
+                    if v is not None:
+                        main_answer = v
                         break
-                trace["forecast"] = jsonable({"answer": main_answer})
-                forecast["trace"] = trace
-            return forecast
+                forecast["llm_answer"] = main_answer
+                if return_trace:
+                    trace["forecast"] = jsonable({"answer": main_answer})
+                    forecast["trace"] = trace
+                return forecast
 
-        # Fallback if forecast isn't a dict
         return {
             "tokens_in": tin,
             "tokens_out": tout,
+            "forecast": forecast,
             "trace": trace if return_trace else {},
         }
+    
     # =========================================================
     # FULL PIPELINE PATH (normal behaviour with toggles)
     # =========================================================
-
     # 1) Load & preprocess
     t = Timer()
     loader = ElectricityDataLoader(csv_path)
@@ -251,10 +194,8 @@ def orchestration_agent(*,
 
     # 3) Horizon classification
     t = Timer()
-    hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", 
-                         reference_time="2025/05/01 00:00:00")
-    
-    horizon = "mid_term"
+    hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", reference_time="2025/04/01 00:00:00")
+    horizon = "short_term"
     if use_horizon_classifier:
         if hasattr(adapter, "stage"):
             with adapter.stage("horizon"):
@@ -285,19 +226,10 @@ def orchestration_agent(*,
     trace["filters"] = jsonable(filters)
     trace["timings_ms"]["feature_extract"] = t.ms()
 
-    # 6) Retrieval of context
+    # 6) Retrieval (no LLM)
     t = Timer()
     retrieval_out = retrieve_context(df, filters, route=horizon, cfg=retrieval_cfg)
     trace["timings_ms"]["retrieval"] = t.ms()
-
-    # Optional: filter retrieval blocks for ablation
-    if retrieval_blocks:
-        retrieval_out = _filter_retrieval_blocks(
-            retrieval_out,
-            include=retrieval_blocks.get("include"),
-            exclude=retrieval_blocks.get("exclude"),
-            topk_per_block=retrieval_blocks.get("topk_per_block"),
-        )
 
     # Save retrieval meta + per-block topK preview
     meta = retrieval_out.get("meta", {}) if isinstance(retrieval_out, dict) else {}
@@ -307,7 +239,11 @@ def orchestration_agent(*,
         "blocks_topk": topk_by_block(combined, k=trace_topk_per_block),
     }
 
-    # 6b) Summarization (optional)
+    # +) data prior years same dates
+    prior_years_same_dates=retrieval_out["prior_years_same_dates"]
+    print("📥_____________________Prior Years Same Dates Retrieved", prior_years_same_dates)
+
+    # 7) Summarization  (LLM stage)
     t = Timer()
     summaries = None
     if use_summarizer:
@@ -330,7 +266,7 @@ def orchestration_agent(*,
             )
     trace["timings_ms"]["summarization"] = t.ms()
 
-    # 7) Statistics (non-LLM)
+    # 8) Statistics (non-LLM)
     t = Timer()
     stats_out = None
     if use_statistics_agent:
@@ -338,7 +274,7 @@ def orchestration_agent(*,
     trace["statistics"] = jsonable(getattr(stats_out, "summary", stats_out))
     trace["timings_ms"]["statistics"] = t.ms()
 
-    # 8) Pattern detection (LLM stage if your impl uses LLM)
+    # 9) Pattern detection (LLM stage)
     t = Timer()
     patterns = None
     if use_pattern_agent:
@@ -369,6 +305,7 @@ def orchestration_agent(*,
                 filters=filters,
                 cfg=forecast_cfg,
                 route=horizon,
+                prior_history=prior_years_same_dates,
             )
     else:
         forecast = forecast_with_llm(
@@ -380,14 +317,16 @@ def orchestration_agent(*,
             filters=filters,
             cfg=forecast_cfg,
             route=horizon,
+            prior_history=prior_years_same_dates,
         )
     trace["timings_ms"]["forecast"] = t.ms()
     trace["timings_ms"]["total"] = t_all.ms()
 
     # Tokens and LLM-call accounting (instrumented adapter only)
-    usage = {}
-    totals = {}
-    calls = []
+    usage: Dict[str, Any] = {}
+    totals: Dict[str, Any] = {}
+    calls: list = []
+
     if hasattr(adapter, "usage"):
         try: usage = adapter.usage()
         except Exception: pass
@@ -410,14 +349,17 @@ def orchestration_agent(*,
     if isinstance(forecast, dict):
         forecast.setdefault("tokens_in", tin)
         forecast.setdefault("tokens_out", tout)
-        if return_trace:
-        # Only keep the main LLM-generated answer (single value or text)
-            main_answer = None
-            for k in ("point", "forecast", "answer", "text", "value"):
-                if k in forecast:
-                    main_answer = forecast[k]
-                    break
 
+        main_answer = None
+        for k in ("point", "forecast", "answer", "text", "value"):
+            v = forecast.get(k)
+            if v is not None:
+                main_answer = v
+                break
+        
+        forecast["llm_answer"] = main_answer
+
+        if return_trace:
             trace["forecast"] = jsonable({"answer": main_answer})
             forecast["trace"] = trace
         return forecast
@@ -426,5 +368,6 @@ def orchestration_agent(*,
     return {
         "tokens_in": tin,
         "tokens_out": tout,
+        "forecast": forecast,
         "trace": trace if return_trace else {},
     }

@@ -63,17 +63,17 @@ def generate_daily():
     horizons = ["short_term", "mid_term", "long_term"]
 
     both_tpl = [
-        "Predict the TOTALDEMAND and RRP for {region_name} ({region_code}) on {iso}.",
-        "Provide a point forecast of TOTALDEMAND and RRP for {region_name} ({region_code}) on {iso}.",
-        "What are the TOTALDEMAND and RRP in {region_name} ({region_code}) at {nice}? ({iso})"
+        "Predict the TOTALDEMAND and RRP for {region_name} on {iso}.",
+        "Provide a point forecast of TOTALDEMAND and RRP for {region_name} on {iso}.",
+        "What are the TOTALDEMAND and RRP in {region_name} at {nice}? ({iso})"
     ]
     demand_tpl = [
-        "Estimate the TOTALDEMAND for {region_name} ({region_code}) on {iso}.",
-        "TOTALDEMAND in {region_name} ({region_code}) at {nice}? ({iso})"
+        "Estimate the TOTALDEMAND for {region_name} on {iso}.",
+        "TOTALDEMAND in {region_name} at {nice}? ({iso})"
     ]
     price_tpl = [
-        "What is the forecasted RRP in {region_name} ({region_code}) on {iso}?",
-        "Estimate the RRP for {region_name} ({region_code}) at {nice}. ({iso})"
+        "What is the forecasted RRP in {region_name} on {iso}?",
+        "Estimate the RRP for {region_name} at {nice}. ({iso})"
     ]
 
     def make_slots(seed_shift):

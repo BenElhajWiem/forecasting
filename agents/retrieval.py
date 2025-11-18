@@ -88,7 +88,7 @@ def _normalize_times(times: List[str]) -> List[Tuple[int,int,int]]:
     return out
 
 # -----------------------------
-# Filter executor (tz-safe, tolerant)
+# Filter executor 
 # -----------------------------
 def filter_data(
     df: pd.DataFrame,
@@ -228,28 +228,68 @@ def _slice_same_date_prior_years(
     start: pd.Timestamp,
     end: Optional[pd.Timestamp],
     years_back: int,
-    cfg: RetrievalConfig
+    cfg: RetrievalConfig,
 ) -> pd.DataFrame:
-    """Same date/time window (duration preserved) in each of the previous N years (tz-aware)."""
+    """
+    For each of the previous `years_back` years, return rows matching:
+      - the exact same timestamp as `start` (if `end` is None), or
+      - the same [start, end] interval shifted into that prior year.
+
+    Uses SETTLEMENTDATE with full datetime precision (date + time),
+    aligned to cfg.tz.
+    """
     parts = []
     duration = (end - start) if end is not None else None
+
+    # 1) Make sure SETTLEMENTDATE is in the target tz (cfg.tz)
+    settle = df["SETTLEMENTDATE"]
+    if getattr(settle.dt, "tz", None) is None or settle.dt.tz.zone != cfg.tz:
+        # Use your helper: source_tz → target_tz
+        settle = _to_target_tz(
+            settle,
+            source_tz=cfg.source_tz,
+            target_tz=cfg.tz,
+        )
+
     for i in range(1, years_back + 1):
         tgt_year = start.year - i
+
+        # 2) Shift start to the target year (with Feb 29 guard)
         try:
             s_y = start.replace(year=tgt_year)
         except Exception:
-            s_y = start.replace(year=tgt_year, day=min(28, start.day))  # Feb 29 guard
+            # e.g. 2024-02-29 → 2023-02-28
+            s_y = start.replace(year=tgt_year, day=min(28, start.day))
+
         if duration is not None:
             e_y = s_y + duration
-            f = {"date_start": s_y, "date_end": e_y, "regions": []}
         else:
-            f = {"date_start": s_y - pd.Timedelta(minutes=1), "date_end": s_y + pd.Timedelta(minutes=1), "regions": []}
-        part = filter_data(df, f, cfg=cfg)
+            e_y = s_y  # exact timestamp (same date + same time)
+
+        # 3) Ensure s_y / e_y are in the same tz as `settle` (cfg.tz)
+        if s_y.tz is None:
+            s_y = s_y.tz_localize(cfg.tz)
+        else:
+            s_y = s_y.tz_convert(cfg.tz)
+
+        if e_y.tz is None:
+            e_y = e_y.tz_localize(cfg.tz)
+        else:
+            e_y = e_y.tz_convert(cfg.tz)
+
+        # 4) Build mask (exact ts or exact interval)
+        if duration is not None:
+            mask = (settle >= s_y) & (settle <= e_y)
+        else:
+            mask = (settle == s_y)
+
+        part = df.loc[mask].copy()
         if not part.empty:
-            part = part.copy()
             part["PRIOR_YEAR"] = tgt_year
             parts.append(part)
+
     return pd.concat(parts, ignore_index=True) if parts else df.iloc[0:0]
+
 
 def _slice_same_week_prior_years(
     df: pd.DataFrame,
@@ -575,6 +615,12 @@ def retrieve_context(
             keep_exact_time=keep_exact_time, times=times
         )
 
+        # prior years (tight)
+        if target_start is not None:
+            prior_years_same_dates = _slice_same_date_prior_years(work, target_start, target_end, cfg.previous_years, cfg)
+            if target_end is None and keep_exact_time and not prior_years_same_dates.empty:
+                prior_years_same_dates = filter_data(prior_years_same_dates, {"times": times}, cfg=cfg)
+
     # -------- Long-term
     if route == "long_term" and anchor is not None:
         # same month across last Y years
@@ -596,6 +642,8 @@ def retrieve_context(
         # optional: also keep tight same-date prior years if you gave a target window
         if target_start is not None:
             prior_years_same_dates = _slice_same_date_prior_years(work, target_start, target_end, cfg.previous_years, cfg)
+            if target_end is None and keep_exact_time and not prior_years_same_dates.empty:
+                prior_years_same_dates = filter_data(prior_years_same_dates, {"times": times}, cfg=cfg)
 
     # ---------------- Scoring & combination ----------------
     block_list = [

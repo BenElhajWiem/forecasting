@@ -2,34 +2,28 @@ from __future__ import annotations
 import os, sys, json, time, uuid, random, csv, traceback
 from typing import Any, Dict, List
 import numpy as np
-# ---------------------------------------------------------------------
 import logging
 
 os.environ["GRPC_VERBOSITY"] = "ERROR"       # Only errors from gRPC
 os.environ["GLOG_minloglevel"] = "3"         # 0=INFO,1=WARNING,2=ERROR,3=FATAL
 os.environ["ABSL_MIN_LOG_LEVEL"] = "3"       # Suppress absl info/warnings
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"     # (optional) silence TensorFlow if imported
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"  
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 # silence grpc & absl loggers inside Python
 logging.getLogger("grpc").setLevel(logging.ERROR)
 logging.getLogger("absl").setLevel(logging.CRITICAL)
 
-# optional: if absl-py is installed, suppress “pre-init STDERR” warning entirely
-try:
-    from absl import logging as absl_logging
-    absl_logging.use_absl_handler()
-    absl_logging.set_verbosity(absl_logging.FATAL)
-    absl_logging._warn_preinit_stderr = 0  # type: ignore[attr-defined]
-except Exception:
-    pass
 # ---------------------------------------------------------------------
+# NEW: parallelism between model groups
+# ---------------------------------------------------------------------
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
-
-# --- local utils ---
+# --- local utils -----------------------------------------------------
 from ablation.utils.io import ensure_dir, load_yaml
 from ablation.utils.logger import get_logger
-from ablation.stubs.model_registry_instrumented import Registry as InstrumentedRegistry, LLMClientAdapter as InstrumentedAdapter
+from ablation.stubs.model_registry_instrumented import (
+    Registry as InstrumentedRegistry,
+    LLMClientAdapter as InstrumentedAdapter,)
 from ablation.stubs.orchestration_stub import orchestration_agent
 
 log = get_logger("ablate")
@@ -39,7 +33,7 @@ log = get_logger("ablate")
 # ---------------------------------------------------------------------
 DEFAULT_YAML = "ablation/ablations.yaml"
 DEFAULT_QUERIES = "ablation/queries_eval_25.json"
-OUTPUT_ROOT = "ablation/outputs"
+OUTPUT_ROOT = "ablation/OUTPUTS_ABLATIONS"
 
 # ---------------------------------------------------------------------
 # Helpers
@@ -84,11 +78,41 @@ def load_queries(path: str) -> List[Dict[str, Any]]:
         out.append(q)
     return out
 
-def extract_main_answer(forecast: Dict[str, Any]) -> Any:
+def extract_main_answer(forecast: Any) -> Any:
+    """
+    Fallback extractor if llm_answer is missing.
+    Tries a few obvious locations; otherwise returns None.
+    """
+    # Already scalar
+    if isinstance(forecast, (str, int, float)):
+        return forecast
+
+    if not isinstance(forecast, dict):
+        return None
+
+    # Prefer explicit llm_answer if present
+    v = forecast.get("llm_answer")
+    if v is not None and not isinstance(v, (dict, list)):
+        return v
+
+    # Top-level scalar keys
     for k in ("forecast", "answer", "point", "value", "text"):
-        if k in forecast and forecast[k] is not None:
-            return forecast[k]
-    return forecast
+        if k in forecast:
+            v = forecast[k]
+            if v is not None and not isinstance(v, (dict, list)):
+                return v
+
+    # trace.forecast.answer
+    trace = forecast.get("trace")
+    if isinstance(trace, dict):
+        f2 = trace.get("forecast")
+        if isinstance(f2, dict):
+            v = f2.get("answer")
+            if v is not None and not isinstance(v, (dict, list)):
+                return v
+
+    return None
+
 
 # ---------------------------------------------------------------------
 # Single run
@@ -166,9 +190,12 @@ def run_single(
                 cost_usd = float(totals.get("cost_usd", 0.0))
                 latency_sec = float(totals.get("latency_sec", 0.0))
 
-            main_answer = extract_main_answer(forecast_out)
+            main_answer = forecast_out.get("llm_answer")
+            if main_answer is None:
+                main_answer = extract_main_answer(forecast_out)
         else:
-            main_answer = str(forecast_out)
+            main_answer = forecast_out
+
     except Exception as e:
         error = f"{type(e).__name__}: {e}"
         log.error(f"[{exp_id}] seed={seed} qid={qid} ERROR: {error}")
@@ -193,8 +220,7 @@ def run_single(
         "started_ts": started,
         "ended_ts": ended,
         "wall_clock_sec": wall_clock,
-        "tokens": {"in": tokens_in, 
-                   "out": tokens_out},
+        "tokens": {"in": tokens_in, "out": tokens_out},
         "cost_usd": cost_usd,
         "latency_sec": latency_sec,
         "trace": trace_obj or {},
@@ -220,11 +246,7 @@ def run_single(
         "region_name": region_name,
         "horizon_hint": horizon_hint,
         "timestamp": start_ts,
-        "answer": (
-            main_answer
-            if isinstance(main_answer, (str, int, float))
-            else json.dumps(main_answer)
-        ),
+        "answer": str(main_answer) if main_answer is not None else "",
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
         "cost_usd": cost_usd,
@@ -244,18 +266,24 @@ def run_single(
 # ---------------------------------------------------------------------
 def write_summary(output_dir: str, csv_path: str):
     import pandas as pd
-
     if not os.path.exists(csv_path):
         return
     df = pd.read_csv(csv_path)
     if df.empty:
         return
-    
-    def safe_sum(c): 
+
+    def safe_sum(c):
         return float(df[c].fillna(0).sum())
-    
-    def safe_mean(c): 
-        return float(df[c].astype(float).replace([np.inf, -np.inf], np.nan).dropna().mean() or 0.0)
+
+    def safe_mean(c):
+        return float(
+            df[c]
+            .astype(float)
+            .replace([np.inf, -np.inf], np.nan)
+            .dropna()
+            .mean()
+            or 0.0
+        )
 
     summary = {
         "num_runs": len(df),
@@ -269,45 +297,39 @@ def write_summary(output_dir: str, csv_path: str):
     with open(os.path.join(output_dir, "summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
+
 # ---------------------------------------------------------------------
-# Main
+# NEW: worker that runs all experiments for ONE model group
 # ---------------------------------------------------------------------
-def main() -> int:
-    cfg = load_yaml(DEFAULT_YAML)
-    global_seeds = cfg.get("global", {}).get("seeds", [7, 21, 42, 63, 84])
-    queries = load_queries(DEFAULT_QUERIES)
-    log.info(f"Loaded {len(queries)} queries from {DEFAULT_QUERIES}")
-
-    registry = InstrumentedRegistry()
-
-    # Collect experiments from per-model groups
-    experiments: List[Dict[str, Any]] = []
-    for key, value in cfg.items():
-        if key.startswith("experiments") and isinstance(value, list):
-            experiments.extend(value)
-
-    if not experiments:
-        log.error("No experiments found in ablation/ablations.yaml (expected keys like 'experiments_deepseek', 'experiments_openai', etc.)")
-        return 2
-
-    csv_fields = [
-        "run_id","exp_id","seed","model","query_id","region","region_name",
-        "horizon_hint","timestamp","answer","tokens_in","tokens_out",
-        "cost_usd","latency_sec","wall_clock_sec","error","trace_path","calls_path",
-    ]
+def run_model_group_worker(
+    group_name: str,
+    experiments: List[Dict[str, Any]],
+    global_seeds: List[int],
+    queries: List[Dict[str, Any]],
+    csv_fields: List[str],
+) -> str:
+    """
+    Runs all experiments in a given group (e.g. experiments_gemini)
+    sequentially in this process. This is what we parallelize across.
+    """
+    log.info(
+        f"[worker-{group_name}] starting {len(experiments)} experiments "
+        f"(sequentially) in this group"
+    )
 
     for exp in experiments:
         exp_id = str(exp.get("id"))
         setup = exp.get("setup", {}) if isinstance(exp.get("setup"), dict) else {}
         model_name = setup.get("model") or exp.get("model")
         if not model_name:
-            log.warning(f"Experiment {exp_id} missing 'model'; skipping.")
+            log.warning(f"[worker-{group_name}] experiment {exp_id} missing 'model'; skipping.")
             continue
 
         # Per-experiment seeds: default to global if not specified
         exp_seeds = exp.get("seeds", global_seeds)
 
-        mapped_setup = {}
+        # Map setup -> orchestration flags
+        mapped_setup: Dict[str, Any] = {}
         if "direct_forecast_only" in setup:
             mapped_setup["direct_forecast_only"] = bool(setup["direct_forecast_only"])
         if "sector_detector" in setup:
@@ -323,12 +345,19 @@ def main() -> int:
         if "retrieval_blocks" in setup:
             mapped_setup["retrieval_blocks"] = setup["retrieval_blocks"]
 
+        # Per-experiment output directory
         exp_dir = os.path.join(OUTPUT_ROOT, exp_id)
         ensure_dir(exp_dir)
         csv_path = os.path.join(exp_dir, "results.csv")
 
+        # Each experiment uses its own registry and CSV file
+        registry = InstrumentedRegistry()
         csv_file, csv_writer = _open_csv_append(csv_path, csv_fields)
-        log.info(f"=== Running experiment {exp_id} with model={model_name} ===")
+
+        log.info(
+            f"[worker-{group_name}] === Running experiment {exp_id} "
+            f"with model={model_name} ==="
+        )
 
         try:
             for seed in exp_seeds:
@@ -347,13 +376,109 @@ def main() -> int:
                         csv_fields=csv_fields,
                     )
         finally:
-            try: csv_file.close()
-            except Exception: pass
+            try:
+                csv_file.close()
+            except Exception:
+                pass
 
         write_summary(exp_dir, csv_path)
-        log.info(f"[{exp_id}] wrote summary and results to {exp_dir}")
+        log.info(f"[worker-{group_name}] [{exp_id}] wrote summary and results to {exp_dir}")
 
-    log.info("All experiments completed.")
+    log.info(f"[worker-{group_name}] all experiments in this group completed.")
+    return group_name
+
+
+# ---------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------
+def main() -> int:
+    cfg = load_yaml(DEFAULT_YAML)
+    global_seeds = cfg.get("global", {}).get("seeds", [7, 21, 42, 63, 84])
+    queries = load_queries(DEFAULT_QUERIES)
+    log.info(f"Loaded {len(queries)} queries from {DEFAULT_QUERIES}")
+
+    # Collect experiments per model group (key = experiments_gemini, etc.)
+    model_groups: Dict[str, List[Dict[str, Any]]] = {}
+    for key, value in cfg.items():
+        if key.startswith("experiments") and isinstance(value, list):
+            model_groups[key] = value
+
+    if not model_groups:
+        log.error(
+            "No experiments found in ablation/ablations.yaml "
+            "(expected keys like 'experiments_deepseek', 'experiments_openai', etc.)"
+        )
+        return 2
+
+    csv_fields = [
+        "run_id",
+        "exp_id",
+        "seed",
+        "model",
+        "query_id",
+        "region",
+        "region_name",
+        "horizon_hint",
+        "timestamp",
+        "answer",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "latency_sec",
+        "wall_clock_sec",
+        "error",
+        "trace_path",
+        "calls_path",
+    ]
+
+    # -----------------------------
+    # Parallelize across MODEL GROUPS (Gemini / DeepSeek / OpenAI / Claude)
+    # -----------------------------
+    group_names = list(model_groups.keys())
+    num_groups = len(group_names)
+
+    # You can override this (e.g. ABLATION_MAX_MODEL_WORKERS=2)
+    max_workers_env = os.getenv("ABLATION_MAX_MODEL_WORKERS")
+    if max_workers_env is not None:
+        try:
+            max_workers = int(max_workers_env)
+        except ValueError:
+            max_workers = None
+    else:
+        max_workers = None
+
+    # default: up to 4 workers, but not more than #groups
+    if max_workers is None or max_workers <= 0:
+        max_workers = min(4, num_groups)
+
+    log.info(
+        f"Launching {num_groups} model-groups in parallel "
+        f"with max_workers={max_workers}"
+    )
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_group = {
+            executor.submit(
+                run_model_group_worker,
+                group_name,
+                model_groups[group_name],
+                global_seeds,
+                queries,
+                csv_fields,
+            ): group_name
+            for group_name in group_names
+        }
+
+        for fut in as_completed(future_to_group):
+            gname = future_to_group[fut]
+            try:
+                result_group = fut.result()
+                log.info(f"Model group {result_group} completed.")
+            except Exception as e:
+                log.error(f"Model group {gname} raised an exception: {e}")
+                log.debug(traceback.format_exc())
+
+    log.info("All model groups and experiments completed.")
     return 0
 
 

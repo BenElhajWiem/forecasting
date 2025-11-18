@@ -7,21 +7,64 @@ global:
     warmup_months: 1
 
 # ==========================
+# Gemini experiments
+# ==========================
+experiments_gemini:
+
+  - id: FULL_gemini
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_horizon_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_stats_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_pattern_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"
+
+  - id: L1_summarizer_gemini
+    seeds: [7]
+    setup:
+      model: "gemini-flash-native"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"
+
+# ==========================
 # DeepSeek experiments
 # ==========================
 
 experiments_deepseek:
-
-  - id: QUERY_ONLY_deepseek
-    seeds: [7]
-    setup:
-      model: "deepseek-chat"
-      direct_forecast_only: true
-      sector_detector: true
-      horizon_classifier: false
-      stats_mode: "off"
-      pattern_detection: false
-      summarization: "off"
 
   - id: FULL_deepseek
     setup:
@@ -77,17 +120,6 @@ experiments_deepseek:
 # ==========================
 experiments_openai:
 
-  - id: QUERY_ONLY_openai
-    seeds: [7]
-    setup:
-      model: "openai-mini"
-      direct_forecast_only: true
-      sector_detector: true
-      horizon_classifier: false
-      stats_mode: "off"
-      pattern_detection: false
-      summarization: "off"
-
   - id: FULL_openai
     setup:
       model: "openai-mini"
@@ -138,86 +170,10 @@ experiments_openai:
       summarization: "off"
 
 # ==========================
-# Gemini experiments
-# ==========================
-experiments_gemini:
-
-  - id: QUERY_ONLY_gemini
-    seeds: [7]
-    setup:
-      model: "gemini-flash-native"
-      direct_forecast_only: true
-      sector_detector: true
-      horizon_classifier: false
-      stats_mode: "off"
-      pattern_detection: false
-      summarization: "off"
-
-  - id: FULL_gemini
-    setup:
-      model: "gemini-flash-native"
-      sector_detector: true
-      horizon_classifier: true
-      stats_mode: "summary_acf"
-      pattern_detection: true
-      summarization: "16sent"
-
-  - id: L1_horizon_gemini
-    seeds: [7]
-    setup:
-      model: "gemini-flash-native"
-      sector_detector: true
-      horizon_classifier: false
-      stats_mode: "summary_acf"
-      pattern_detection: true
-      summarization: "16sent"
-
-  - id: L1_stats_gemini
-    seeds: [7]
-    setup:
-      model: "gemini-flash-native"
-      sector_detector: true
-      horizon_classifier: true
-      stats_mode: "off"
-      pattern_detection: true
-      summarization: "16sent"
-
-  - id: L1_pattern_gemini
-    seeds: [7]
-    setup:
-      model: "gemini-flash-native"
-      sector_detector: true
-      horizon_classifier: true
-      stats_mode: "summary_acf"
-      pattern_detection: false
-      summarization: "16sent"
-
-  - id: L1_summarizer_gemini
-    seeds: [7]
-    setup:
-      model: "gemini-flash-native"
-      sector_detector: true
-      horizon_classifier: true
-      stats_mode: "summary_acf"
-      pattern_detection: true
-      summarization: "off"
-
-# ==========================
 # Claude experiments
 # ==========================
 
 experiments_claude:
-
-  - id: QUERY_ONLY_claude
-    seeds: [7]
-    setup:
-      model: "claude-api"
-      direct_forecast_only: true
-      sector_detector: true
-      horizon_classifier: false
-      stats_mode: "off"
-      pattern_detection: false
-      summarization: "off"
 
   - id: FULL_claude
     setup:

@@ -28,6 +28,14 @@ class SectorDetector:
             "Rules:\n"
             "1) No punctuation, no quotes, no explanations, no JSON.\n"
             "2) If uncertain, choose the single best fit; if nothing fits, output Undetected.\n"
+            "### FEW-SHOT EXAMPLES ###\n"
+            "Query: Predict electricity demand in NSW.\n"
+            "Answer: Energy\n\n"
+            "Query: Summarize recent stock price trends for Apple.\n"
+            "Answer: Finance\n\n"
+            "Query: Generate a meal plan for a high-protein diet.\n"
+            "Answer: Health\n\n"
+            "### END OF EXAMPLES ###\n"
         )
         user = (
             "Classify the following query into exactly ONE category from the allowed list.\n"
