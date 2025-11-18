@@ -1,7 +1,7 @@
 [
   {
     "id": "short_term_NSW1_001",
-    "text": "Predict the TOTALDEMAND for NSW (NSW1) on June 19, 2025 at 23:30.",
+    "text": "Predict the TOTALDEMAND for NSW on June 19, 2025 at 23:30.",
     "region": "NSW1",
     "region_name": "NSW",
     "horizon_hint": "short_term",
@@ -10,7 +10,7 @@
   },
   {
     "id": "short_term_VIC1_005",
-    "text": "Estimate the TOTALDEMAND and RRP for Victoria (VIC1) on July 20, 2025 at 00:00.",
+    "text": "Estimate the TOTALDEMAND and RRP for Victoria on July 20, 2025 at 00:00.",
     "region": "VIC1",
     "region_name": "Victoria",
     "horizon_hint": "short_term",
@@ -19,7 +19,7 @@
   },
   {
     "id": "short_term_NSW1_002",
-    "text": "Estimate the TOTALDEMAND for NSW1 (NSW1) on June 16, 2025 at 2pm.",
+    "text": "Estimate the TOTALDEMAND for NSW1 on June 16, 2025 at 2pm.",
     "region": "NSW1",
     "region_name": "NSW1",
     "horizon_hint": "short_term",
@@ -28,7 +28,7 @@
   },
   {
     "id": "long_term_QLD1_007",
-    "text": "Predict the TOTALDEMAND and RRP for Queensland (QLD1) on May 18, 2025 at 15:30.",
+    "text": "Predict the TOTALDEMAND and RRP for Queensland on May 18, 2025 at 15:30.",
     "region": "QLD1",
     "region_name": "Queensland",
     "horizon_hint": "long_term",
@@ -37,7 +37,7 @@
   },
   {
     "id": "mid_term_TAS1_011",
-    "text": "What is the TOTALDEMAND in Tasmania (TAS1) at July 27, 2025 at 21:00?",
+    "text": "What is the TOTALDEMAND in Tasmania at July 27, 2025 at 21:00?",
     "region": "TAS1",
     "region_name": "Tasmania",
     "horizon_hint": "mid_term",
@@ -46,7 +46,7 @@
   },
   {
     "id": "long_term_TAS1_012",
-    "text": "What is the forecasted RRP in TAS (TAS1) on June 28, 2025 at 16:30?",
+    "text": "What is the forecasted RRP in TAS on June 28, 2025 at 16:30?",
     "region": "TAS1",
     "region_name": "TAS",
     "horizon_hint": "long_term",
@@ -55,7 +55,7 @@
   },
   {
     "id": "long_term_QLD1_009",
-    "text": "Estimate the TOTALDEMAND and the RRP for Queensland (QLD1) at July 12, 2025 at 23:30.",
+    "text": "Estimate the TOTALDEMAND and the RRP for Queensland at July 12, 2025 at 23:30.",
     "region": "QLD1",
     "region_name": "Queensland",
     "horizon_hint": "long_term",
@@ -64,7 +64,7 @@
   },
   {
     "id": "long_term_VIC1_004",
-    "text": "What are the TOTALDEMAND and RRP in Victoria (VIC1) at June 24, 2025 at 07:00?",
+    "text": "What are the TOTALDEMAND and RRP in Victoria at June 24, 2025 at 07:00?",
     "region": "VIC1",
     "region_name": "Victoria",
     "horizon_hint": "long_term",
@@ -73,7 +73,7 @@
   },
   {
     "id": "short_term_NSW1_003",
-    "text": "What is the forecasted RRP in New South Wales (NSW1) on June 25, 2025 at 18:00?",
+    "text": "What is the forecasted RRP in New South Wales on June 25, 2025 at 18:00?",
     "region": "NSW1",
     "region_name": "New South Wales",
     "horizon_hint": "short_term",
@@ -82,7 +82,7 @@
   },
   {
     "id": "long_term_TAS1_010",
-    "text": "What are the TOTALDEMAND and RRP in Tasmania (TAS1) at May 09, 2025 at 21:00?",
+    "text": "What are the TOTALDEMAND and RRP in TAS1 at May 09, 2025 at 21:00?",
     "region": "TAS1",
     "region_name": "Tasmania",
     "horizon_hint": "long_term",
@@ -91,7 +91,7 @@
   },
   {
     "id": "long_term_VIC1_006",
-    "text": "What is the forecasted RRP in VIC1 (VIC1) on June 20, 2025 at 07:00?",
+    "text": "What is the forecasted RRP in VIC1 on June 20, 2025 at 07:00?",
     "region": "VIC1",
     "region_name": "VIC1",
     "horizon_hint": "long_term",
@@ -100,7 +100,7 @@
   },
   {
     "id": "short_term_QLD1_008",
-    "text": "Estimate the TOTALDEMAND for QLD1 (QLD1) on July 13, 2025 at 16:00.",
+    "text": "Estimate the TOTALDEMAND for QLD1 on July 13, 2025 at 16:00.",
     "region": "QLD1",
     "region_name": "QLD1",
     "horizon_hint": "short_term",
@@ -109,7 +109,7 @@
   },
   {
     "id": "hourly_NSW1_001",
-    "text": "Generate a 6-hour forecast every hour for TOTALDEMAND and RRP in New South Wales (NSW1) starting at October 15, 2025 at 19:00.",
+    "text": "Generate a 6-hour forecast every hour for TOTALDEMAND and RRP in New South Wales starting at October 15, 2025 at 19:00.",
     "region": "NSW1",
     "region_name": "New South Wales",
     "forecast_horizon_hours": 6,
@@ -120,7 +120,7 @@
   },
   {
     "id": "hourly_VIC1_005",
-    "text": "Forecast 24-hour hourly forecast for VIC1 (VIC1), beginning at July 01, 2025 at 20:30, including TOTALDEMAND and RRP.",
+    "text": "Forecast 24-hour hourly forecast for VIC1, beginning at July 01, 2025 at 20:30, including TOTALDEMAND and RRP.",
     "region": "VIC1",
     "region_name": "VIC1",
     "forecast_horizon_hours": 24,
@@ -131,7 +131,7 @@
   },
   {
     "id": "hourly_NSW1_002",
-    "text": "Forecast 48-hour every 2 hours forecast for New South Wales (NSW1), beginning at July 15, 2025 at 9am, including TOTALDEMAND and RRP.",
+    "text": "Forecast 48-hour every 2 hours forecast for NSW , beginning at July 15, 2025 at 9am, including TOTALDEMAND and RRP.",
     "region": "NSW1",
     "region_name": "New South Wales",
     "forecast_horizon_hours": 48,
@@ -153,7 +153,7 @@
   },
   {
     "id": "hourly_TAS1_012",
-    "text": "Forecast 12-hour forecast every 30 minutes for TAS1 (TAS1), beginning at July 01, 2025 at 16:00, including TOTALDEMAND and RRP.",
+    "text": "Forecast 12-hour forecast every 30 minutes for TAS1, beginning at July 01, 2025 at 16:00, including TOTALDEMAND and RRP.",
     "region": "TAS1",
     "region_name": "TAS1",
     "forecast_horizon_hours": 12,
@@ -164,7 +164,7 @@
   },
   {
     "id": "hourly_SA1_011",
-    "text": "Generate a 48-hour every 2 hours forecast for TOTALDEMAND and RRP in South australia (SA1) starting at July 01, 2025 at 20:00.",
+    "text": "Generate a 48-hour every 2 hours forecast for TOTALDEMAND and RRP in South australia starting at July 01, 2025 at 20:00.",
     "region": "SA1",
     "region_name": "South australia",
     "forecast_horizon_hours": 48,
@@ -175,7 +175,7 @@
   },
   {
     "id": "hourly_QLD1_010",
-    "text": "Forecast 12-hour forecast every 30 minutes for QLD1 (QLD1), beginning at May 20, 2025 at 12:00, including TOTALDEMAND and RRP.",
+    "text": "Forecast 12-hour forecast every 30 minutes for QLD1, beginning at May 20, 2025 at 12:00, including TOTALDEMAND and RRP.",
     "region": "QLD1",
     "region_name": "QLD1",
     "forecast_horizon_hours": 12,
@@ -186,7 +186,7 @@
   },
   {
     "id": "hourly_TAS1_013",
-    "text": "Forecast 48-hour every 2 hours forecast for TAS1 (TAS1), beginning at May 05, 2025 at 19:30, including TOTALDEMAND and RRP.",
+    "text": "Forecast 48-hour every 2 hours forecast for TAS1, beginning at May 05, 2025 at 19:30, including TOTALDEMAND and RRP.",
     "region": "TAS1",
     "region_name": "TAS1",
     "forecast_horizon_hours": 48,
@@ -197,7 +197,7 @@
   },
   {
     "id": "hourly_NSW1_004",
-    "text": "Generate a 12-hour forecast every 30 minutes for TOTALDEMAND and RRP in NSW (NSW1) starting at May 20, 2025 at 10:30.",
+    "text": "Generate a 12-hour forecast every 30 minutes for TOTALDEMAND and RRP in NSW starting at May 20, 2025 at 10:30.",
     "region": "NSW1",
     "region_name": "NSW",
     "forecast_horizon_hours": 12,
@@ -208,7 +208,7 @@
   },
   {
     "id": "hourly_NSW1_003",
-    "text": "Generate a 24-hour every 2 hours forecast for TOTALDEMAND and RRP in NSW (NSW1) starting at June 03, 2025 at 12:00.",
+    "text": "Generate a 24-hour every 2 hours forecast for TOTALDEMAND and RRP in NSW starting at June 03, 2025 at 12:00.",
     "region": "NSW1",
     "region_name": "NSW",
     "forecast_horizon_hours": 24,
@@ -219,7 +219,7 @@
   },
   {
     "id": "hourly_QLD1_008",
-    "text": "Generate a 24-hour hourly forecast for TOTALDEMAND and RRP in QLD1 (QLD1) starting at November 03, 2025 at 22:00.",
+    "text": "Generate a 24-hour hourly forecast for TOTALDEMAND and RRP in QLD1 starting at November 03, 2025 at 22:00.",
     "region": "QLD1",
     "region_name": "QLD1",
     "forecast_horizon_hours": 24,
@@ -230,7 +230,7 @@
   },
   {
     "id": "hourly_VIC1_006",
-    "text": "Forecast 24-hour hourly forecast for Victoria (VIC1), beginning at June 03, 2025 at 07:45, including TOTALDEMAND and RRP.",
+    "text": "Forecast 24-hour hourly forecast for Victoria, beginning at June 03, 2025 at 07:45, including TOTALDEMAND and RRP.",
     "region": "VIC1",
     "region_name": "Victoria",
     "forecast_horizon_hours": 24,
@@ -241,7 +241,7 @@
   },
   {
     "id": "hourly_QLD1_009",
-    "text": "Forecast 48-hour every 2 hours forecast for QLD (QLD1), beginning at September 22, 2025 at 2am, including TOTALDEMAND and RRP.",
+    "text": "Forecast 48-hour every 2 hours forecast for QLD, beginning at September 22, 2025 at 2am, including TOTALDEMAND and RRP.",
     "region": "QLD1",
     "region_name": "QLD",
     "forecast_horizon_hours": 48,

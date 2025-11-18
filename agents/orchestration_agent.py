@@ -17,23 +17,11 @@ from utils.model_registry import *
 
 from typing import Any, Dict, Optional
 
-RETREIVAL_KEYS = [
-    "recent_window",
-    "same_hour_previous_days",
-    "same_weekday_recent_weeks",
-    "prior_years_same_dates",
-    "prior_years_same_week",
-    "same_woy_prior_years",
-    "same_month_prev_years",
-    "macro_trend_blocks",
-    "combined",
-    "meta"
-]
 
 def orchestration_agent(*,
     user_query: str,
     adapter,                     
-    csv_path: str = "data/data.csv",
+    csv_path: str = "data/processed_data.csv",
     retrieval_cfg: Optional[RetrievalConfig] = None,
     summarize_cfg: Optional[SummarizeConfig] = None,
     anomaly_cfg: Optional[AnomalyConfig] = None,
@@ -59,16 +47,16 @@ def orchestration_agent(*,
 
     # 2) Sector classification
     sector = sector_detector.classify(adapter, user_query)
-    print("🏷️ Sector classification:", sector)
+    print("🏷️_____________________Sector classification:", sector)
 
     # 3) Route classification
     hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", reference_time="2025/04/01 00:00:00")
     horizon = classify_horizon(adapter, user_query, df, hcfg)
-    print("🧭 Forecast type classification:", horizon)
+    print("🧭_____________________Forecast type classification:", horizon)
 
     # 4) Compute "now" anchor
     now_iso = loader.compute_anchor_now_iso()
-    print("⏰ Anchor 'now' timestamp:", now_iso)
+    print("⏰_____________________Anchor 'now' timestamp:", now_iso)
 
     # 5) Feature extraction
     timeseries_agent = TimeSeriesFilterExtractor(adapter)
@@ -77,25 +65,29 @@ def orchestration_agent(*,
     domain_filters = domain_agent.extract(user_query)
 
     filters = timeseries_filters | domain_filters
-    print("🔍 Extracted filters:", filters)
+    print("🔍_____________________Extracted filters:", filters)
 
     # 6) Retrieval
     retrieval_out = retrieve_context(df, filters ,route=horizon, cfg=retrieval_cfg)
-    print("📥 Data Retrieved")
+    print("📥_____________________Data Retrieved", retrieval_out)
 
-    # +) Summarization
-    #summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
-    summaries=""
-    print("📝 Summarization Done")
+    # +) data prior years same dates
+    prior_years_same_dates=retrieval_out["prior_years_same_dates"]
+    print("📥_____________________Prior Years Same Dates Retrieved", prior_years_same_dates)
 
-    # 7) Statistics calculation (structured)
+    # 7) Summarization
+    summaries = summarize_from_retrieval_strategy(adapter, retrieval_out=retrieval_out, cfg=summarize_cfg, acfg=anomaly_cfg, metrics=filters.get("metrics"))
+    #summaries=""
+    print("📝_____________________Summarization Done", summaries)
+
+    # 8) Statistics calculation (structured)
     stats_out = StatisticalAgent(StatConfig(tz="Australia/Sydney")).run(retrieval_out)
-    print("📊 Statistics calculated")
+    print("📊_____________________Statistics calculated", stats_out)
 
-    # 8) Pattern detection (numeric detectors + LLM narrator)
-    #patterns = detect_patterns_with_llm_after_retrieval(adapter, retrieval_out=retrieval_out)
-    print("🧩 Pattern detection Done")
-    patterns=""
+    # 9) Pattern detection (numeric detectors + LLM narrator)
+    patterns = detect_patterns_with_llm_after_retrieval(adapter, retrieval_out=retrieval_out)
+    print("🧩_____________________Pattern detection Done", patterns)
+    #patterns=""
 
     # 8) Forecast
     forecast = forecast_with_llm (
@@ -106,6 +98,7 @@ def orchestration_agent(*,
         filters=filters,
         cfg=forecast_cfg,
         route=horizon,
+        prior_history=prior_years_same_dates,
         )
-    print("🤖 Forecast results", forecast)
+    print("🤖_____________________Forecast results", forecast)
     return forecast

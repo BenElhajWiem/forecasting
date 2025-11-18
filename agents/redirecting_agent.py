@@ -56,9 +56,10 @@ def _latest_anchor(df: pd.DataFrame, cfg: HorizonConfig) -> pd.Timestamp:
 
 def _horizon_messages(query: str, ref_ts: pd.Timestamp, cfg: HorizonConfig) -> List[Dict[str, str]]:
     system = (
-        "You are a deterministic horizon classifier. "
-        "Given a query and a reference timestamp, output EXACTLY one word: "
-        "short_term, mid_term, or long_term. No punctuation, no explanations, no JSON."
+        "You are a deterministic horizon classifier.\n"
+        "Given a query and a reference timestamp, output EXACTLY one word from the allowed list: [short_term, mid_term, or long_term]"
+        "Rules:\n"
+        "No punctuation, no explanations, no JSON."
     )
     user = (
         "Use the provided reference timestamp as the anchor.\n"
@@ -67,7 +68,6 @@ def _horizon_messages(query: str, ref_ts: pd.Timestamp, cfg: HorizonConfig) -> L
         f"mid_term:   weeks/months ({cfg.short_days+1}–{cfg.long_days} days)\n"
         f"long_term:  years (> {cfg.long_days} days)\n"
         f"query: {json.dumps(query, ensure_ascii=False)}\n\n"
-        "Output only: short_term OR mid_term OR long_term"
     )
     return [
         {"role": "system", "content": system},

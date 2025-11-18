@@ -119,6 +119,7 @@ def forecast_with_llm(
     filters: Dict[str, Any],
     cfg: ForecastConfig = ForecastConfig(),
     route: Optional[str] = None,
+    prior_history = None,
     # Optional one-off overrides (rarely needed; keeps call-site simple)
     temperature: Optional[float] = 0.0,
     max_tokens: Optional[int] = None,
@@ -130,9 +131,9 @@ def forecast_with_llm(
     tgt = _derive_targets_from_filters(filters, cfg.tz)
     units_lines = _render_units_lines(tgt["metrics"], cfg.units_map)
 
-    summary_block  = _cap_text(summary)
-    stats_block    = _cap_text(stats)
-    patterns_block = _cap_text(patterns)
+    summary_block  = summary
+    stats_block    = stats 
+    patterns_block = patterns
     targets_header = _format_targets_header(tgt, route)
 
     system_msg = (
@@ -147,13 +148,17 @@ def forecast_with_llm(
     )
     
     user_msg = f"""
-{targets_header}
+USER QUERY: {user_query}
 
 UNITS: {units_lines}
 
-USER QUERY: {user_query}
+{targets_header}
+
+PRIOR HISTORY (same dates prior years):
+{prior_history}
 
 EVIDENCE (use as-is; do not recalc):
+
 - Statistical Insights:
 {stats_block}
 

@@ -432,7 +432,7 @@ class TimeSeriesFilterExtractor:
 Rules:
 - If both endpoints of a 'from ... to ...' contain times, use ISO 'start_time'/'end_time'.
 - If endpoints are dates only, use 'date_start'/'date_end' (YYYY-MM-DD).
-- Relative windows ('next 48 hours', 'last week'): compute ISO 'start_time'/'end_time' using NOW="{now_iso}".
+- Relative windows ('next 48 hours', 'next week'): compute ISO 'start_time'/'end_time' using NOW="{now_iso}".
 - Cadence: if stated (e.g., 'every 30 minutes', 'hourly', '1H'), put it in 'freq'; else null.
 - Vague times ('morning', 'afternoon', etc.) → set 'vague_label' and leave tolerance null.
 - Week filters: fill 'weekdays' with 3-letter uppercase codes (MON..SUN). Set 'weekends' boolean if user asked for weekends.
@@ -443,6 +443,7 @@ Rules:
 - Date spans → list under 'date_ranges' with 'start_date'/'end_date'.
 - Output ONLY temporal info; no regions/metrics. Extra cues go in 'notes'.
 - if notes is not null, search for extra cues in notes and add it to 'notes'.
+- if it is one-point in time, set both date_start and date_end to that date.
 
 Return a JSON object with keys:
 {json.dumps(list(TIME_JSON_SCHEMA["properties"].keys()))}

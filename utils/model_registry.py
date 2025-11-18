@@ -1,27 +1,16 @@
 from __future__ import annotations
+from dataclasses import dataclass
+from typing import Optional, Dict, Any, List, Tuple
 
 import os, json, time, logging
-# gRPC + glog/absl
-os.environ["GRPC_VERBOSITY"] = "ERROR"   # DEBUG/INFO/ERROR
-os.environ["GLOG_minloglevel"] = "3"     # 0=INFO,1=WARNING,2=ERROR,3=FATAL
-os.environ["ABSL_MIN_LOG_LEVEL"] = "3"   # absl: 0=INFO,1=WARNING,2=ERROR,3=FATAL
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
-from dataclasses import dataclass
-
-from typing import Optional, Dict, Any, List
-
 from openai import OpenAI
 from openai import BadRequestError 
-
-
 import google.generativeai as genai 
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
-
-
-logger = logging.getLogger(__name__)
 
 # ---------- Model registry ----------
 @dataclass
@@ -38,10 +27,19 @@ class ModelSpec:
 class Registry:
     def __init__(self):
         self.presets = {
-            # OpenAI (native)
+            # OpenAI
             "openai-mini": ModelSpec(
                 provider="openai",
                 model="gpt-4o-mini",
+                api_key=os.getenv("OPENAI_API_KEY"),   # from .env
+                base_url=None,
+                supports_response_format=True,
+                sdk="openai",
+            ),
+            # OpenAI
+            "openai-gpt5-pro": ModelSpec(
+                provider="openai",
+                model="gpt-5-pro",
                 api_key=os.getenv("OPENAI_API_KEY"),   # from .env
                 base_url=None,
                 supports_response_format=True,
@@ -56,40 +54,31 @@ class Registry:
                 supports_response_format=False,
                 sdk="openai",
             ),
-            # Google Gemini
-            # "gemini-flash": ModelSpec(
-            #     provider="gemini",
-            #     model="gemini-2.5-flash",
-            #     api_key=os.getenv("GEMINI_API_KEY"),
-            #     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            #     supports_response_format=False,
-            #     extra_body=None,
-            #     reasoning_effort=None,
-            #     sdk="openai",
-            # ),
+            
+            # Google Gemini OPENAI-API
+            "gemini-flash": ModelSpec(
+                provider="gemini",
+                model="gemini-2.5-pro",
+                api_key=os.getenv("GEMINI_API_KEY"),
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                supports_response_format=False,
+                extra_body=None,
+                reasoning_effort="high",
+                sdk="openai",
+            ),
 
             # Google Gemini (Native SDK)
             "gemini-flash-native": ModelSpec(
             provider="gemini",
             model="gemini-2.5-flash",
             api_key=os.getenv("GEMINI_API_KEY"),
-            base_url=None,                   # native SDK doesn't use base_url
-            supports_response_format=True,   # we can use response_mime_type for JSON
+            base_url=None,                   
+            supports_response_format=True,   
             extra_body=None,
-            reasoning_effort=None,           # native has different knobs
+            reasoning_effort=None,          
             sdk="gemini_native",
         ),
-
-            # # Meta llama
-            # "llama-api": ModelSpec(
-            #     provider="meta",
-            #     model="llama-3.1-8b-instruct",
-            #     api_key=os.getenv("LLAMA_API_KEY"),
-            #     base_url="https://api.llama-api.com/v1",
-            #     supports_response_format=True
-            # ),
-
-            # Meta llama
+            # Claude Anthropic
             "claude-api": ModelSpec(
                 provider="claude",
                 model="claude-sonnet-4-5",
@@ -340,7 +329,7 @@ class LLMClientAdapter:
         model_id = model_override or self.spec.model
         system_instruction, contents = self._split_system_and_contents(messages)
 
-        out_tokens = max_tokens or 16384
+        out_tokens = max_tokens
 
         def build_model(tokens: int):
             cfg: Dict[str, Any] = {
@@ -382,7 +371,7 @@ class LLMClientAdapter:
 
     
     def _extract_gemini_text_or_retry(self, resp, contents, build_model, out_tokens) -> str:
-        # No candidates?
+        
         if not getattr(resp, "candidates", None):
             pf = getattr(resp, "prompt_feedback", None)
             raise RuntimeError(f"Empty Gemini response. prompt_feedback={pf}")
@@ -401,8 +390,7 @@ class LLMClientAdapter:
 
         # Retry once if we hit MAX_TOKENS with no text parts
         if _is_max_tokens(fr):
-            new_tokens = 16384
-            logger.info(f"[Gemini native] MAX_TOKENS; retrying with max_output_tokens={new_tokens}")
+            new_tokens = 65536
             model2 = build_model(new_tokens)
             resp2 = model2.generate_content(contents)
             if getattr(resp2, "candidates", None):
