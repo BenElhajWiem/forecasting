@@ -3,6 +3,9 @@ forecasting
 .env
 *.csv
 .DS_Store
-test
-ablation/outputs
-ablation/outputs_ablations
+ablation/Gemini
+ablation/Deepseek
+ablation/OpenAI
+ablation/Claude
+ablation/queries
+data.ipynb

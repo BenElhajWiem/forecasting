@@ -4,14 +4,14 @@ PRICES = {
     "gpt-4o-mini":       {"input_per_1k": 0.00015,   "output_per_1k": 0.00066},
     "deepseek-chat":     {"input_per_1k": 0.00028,   "output_per_1k": 0.00028},  # placeholder
     "gemini-2.5-flash":  {"input_per_1k": 0.025,   "output_per_1k": 0.0025},  
-    "claude-sonnet-4":   {"input_per_1k": 0.003,  "output_per_1k": 0.015},
+    "claude-sonnet-4-5":   {"input_per_1k": 0.003,  "output_per_1k": 0.015},
 }
 
 ALIASES = {
     "openai-mini":          "gpt-4o-mini",
     "deepseek-chat":        "deepseek-chat",
     "gemini-flash-native":  "gemini-2.5-flash",
-    "claude-api":           "claude-sonnet-4",
+    "claude-api":           "claude-sonnet-4-5",
 }
 
 def _price_key(model_or_preset: str) -> str:

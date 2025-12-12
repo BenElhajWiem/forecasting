@@ -1,4 +1,3 @@
-# utils/model_registry_instrumented.py
 from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -9,90 +8,13 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 logger = logging.getLogger(__name__)
-os.environ["GRPC_VERBOSITY"] = "ERROR"
-os.environ["GLOG_minloglevel"] = "2"
 
 from openai import OpenAI
 from openai import BadRequestError
 import tiktoken
 import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 from ablation.utils.cost import estimate_cost  # <-- adjust if your path differs
-
-# -------------------------
-# Helpers
-# -------------------------
-def _json_loads_loose(s: str) -> Dict[str, Any]:
-    s = (s or "").strip()
-    try:
-        return json.loads(s)
-    except Exception:
-        try:
-            i = s.index("{"); j = s.rindex("}") + 1
-            return json.loads(s[i:j])
-        except Exception:
-            return {"text": s[:2000]}
-
-def _extract_choice_text(choice) -> str:
-    msg = getattr(choice, "message", None)
-    if msg is not None:
-        c = getattr(msg, "content", "")
-        if isinstance(c, str):
-            return c
-        if isinstance(c, list):
-            buf = []
-            for p in c:
-                if isinstance(p, str): buf.append(p)
-                elif isinstance(p, dict) and "text" in p: buf.append(p["text"])
-                else:
-                    t = getattr(p, "text", None)
-                    if isinstance(t, str): buf.append(t)
-            return "".join(buf)
-        if isinstance(c, dict) and "text" in c:
-            return c["text"]
-    if hasattr(choice, "text") and isinstance(choice.text, str):
-        return choice.text
-    delta = getattr(choice, "delta", None)
-    if delta is not None:
-        dc = getattr(delta, "content", "")
-        if isinstance(dc, str): return dc
-    return ""
-
-def _is_max_tokens(fr: Any) -> bool:
-    # keep your existing heuristic: enum name "MAX_TOKENS", str "MAX_TOKENS", or int code == 2
-    if fr is None: return False
-    name = getattr(fr, "name", None)
-    if isinstance(name, str) and name.upper() == "MAX_TOKENS": return True
-    if isinstance(fr, str) and fr.upper() == "MAX_TOKENS": return True
-    if isinstance(fr, int) and fr == 2: return True
-    return False
-
-
-# -------------------------
-# Token counting helpers
-# -------------------------
-def count_tokens_tiktoken(text: str, model: str = "gpt-4o-mini") -> int:
-    """
-    Accurate token counter using tiktoken with fallback.
-    Works even if model is not officially supported by OpenAI tokenizer.
-    """
-    if not isinstance(text, str) or not text.strip():
-        return 0
-    try:
-        # Try tokenizer specific to the model
-        enc = tiktoken.encoding_for_model(model)
-    except KeyError:
-        # Fallback to a generic encoding
-        enc = tiktoken.get_encoding("cl100k_base")
-    try:
-        return len(enc.encode(text))
-    except Exception:
-        # Final fallback if encoding fails
-        return max(1, len(text) // 4)
-
-def _rough_token_estimate(txt: str, model: str = "gpt-4o-mini") -> int:
-    return count_tokens_tiktoken(txt, model=model)
 
 # -------------------------
 # Registry
@@ -109,10 +31,6 @@ class ModelSpec:
     sdk: str = "openai"
 
 class Registry:
-    """
-    Instrumented registry mirroring your original preset keys.
-    Safe to import only in ablation code.
-    """
     def __init__(self):
         self.presets = {
             "openai-mini": ModelSpec(
@@ -156,22 +74,111 @@ class Registry:
             raise KeyError(f"Unknown preset: {name}")
         return self.presets[name]
 
-# a module-level default if convenient
 registry = Registry()
 
+
+# -------------------------
+# Helpers
+# -------------------------
+def _json_loads_loose(s: str) -> Dict[str, Any]:
+    s = (s or "").strip()
+    try:
+        return json.loads(s)
+    except Exception:
+        try:
+            i = s.index("{")
+            j = s.rindex("}") + 1
+            return json.loads(s[i:j])
+        except Exception:
+            return {"text": s[:2000]}
+        
+def chat_json(
+        self,
+        messages: List[Dict[str, str]],
+        *,
+        temperature: float = 0.0,
+        max_tokens: Optional[int] = None,
+        model_override: Optional[str] = None,
+        strict_json_first: bool = False,
+    ) -> Dict[str, Any]:
+        out = self.chat_json_loose(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            model_override=model_override,
+            strict_json_first=strict_json_first,
+        )
+        if not isinstance(out, dict):
+            raise ValueError("Expected JSON object from model.")
+        return out
+
+def _extract_choice_text(choice) -> str:
+    """Robust for OpenAI-compat & Gemini-compat."""
+    msg = getattr(choice, "message", None)
+    if msg is not None:
+        c = getattr(msg, "content", "")
+        if isinstance(c, str):
+            return c
+        if isinstance(c, list):
+            buf = []
+            for p in c:
+                if isinstance(p, str):
+                    buf.append(p)
+                elif isinstance(p, dict) and "text" in p:
+                    buf.append(p["text"])
+                else:
+                    t = getattr(p, "text", None)
+                    if isinstance(t, str): buf.append(t)
+            return "".join(buf)
+        if isinstance(c, dict) and "text" in c:
+            return c["text"]
+    if hasattr(choice, "text") and isinstance(choice.text, str):
+        return choice.text
+    delta = getattr(choice, "delta", None)
+    if delta is not None:
+        dc = getattr(delta, "content", "")
+        if isinstance(dc, str): return dc
+    return ""
+
+def _is_max_tokens(fr: Any) -> bool:
+    """Detect MAX_TOKENS across SDK versions (name, str, or int code=2)."""
+    if fr is None: return False
+    name = getattr(fr, "name", None)
+    if isinstance(name, str) and name.upper() == "MAX_TOKENS": return True
+    if isinstance(fr, str) and fr.upper() == "MAX_TOKENS": return True
+    if isinstance(fr, int) and fr == 2: return True
+    return False
+
+
+# -------------------------
+# Token counting helpers
+# -------------------------
+def count_tokens_tiktoken(text: str, model: str = "gpt-4o-mini") -> int:
+    """
+    Accurate token counter using tiktoken with fallback.
+    Works even if model is not officially supported by OpenAI tokenizer.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return 0
+    try:
+        # Try tokenizer specific to the model
+        enc = tiktoken.encoding_for_model(model)
+    except KeyError:
+        # Fallback to a generic encoding
+        enc = tiktoken.get_encoding("cl100k_base")
+    try:
+        return len(enc.encode(text))
+    except Exception:
+        # Final fallback if encoding fails
+        return max(1, len(text) // 4)
+
+def _rough_token_estimate(txt: str, model: str = "gpt-4o-mini") -> int:
+    return count_tokens_tiktoken(txt, model=model)
 
 # -------------------------
 # Adapter (instrumented)
 # -------------------------
 class LLMClientAdapter:
-    """
-    API-compatible with your existing adapter:
-      - chat() -> str
-      - chat_json_loose() -> dict
-    Adds:
-      - stage() context manager
-      - call_log(), totals(), usage(), reset_call_log()
-    """
 
     def __init__(self, spec: ModelSpec):
         self.spec = spec
@@ -237,9 +244,6 @@ class LLMClientAdapter:
             "tokens_out": int(completion_tokens),
             "cost_usd": float(cost),
         })
-
-
-
 
     # ---- public chat APIs ----
     def chat(
@@ -338,6 +342,7 @@ class LLMClientAdapter:
         self._record_call(prompt_tokens=pt, completion_tokens=ct, latency_sec=latency)
         return (out_text or "").strip()
 
+    # ---------- Retry logic for OpenAI-compat ----------
     def _retry_chat(self, **kwargs) -> Any:
         if not self.spec.supports_response_format and "response_format" in kwargs:
             kwargs.pop("response_format", None)
@@ -364,8 +369,7 @@ class LLMClientAdapter:
         contents = []
         for m in messages:
             r = m.get("role")
-            if r == "system":
-                continue
+            if r == "system": continue
             if r == "user":
                 contents.append({"role": "user", "parts": [m.get("content", "")]})
             elif r in ("assistant", "model"):
@@ -385,8 +389,7 @@ class LLMClientAdapter:
         model_id = model_override or self.spec.model
         system_instruction, contents = self._split_system_and_contents(messages)
 
-        # keep your exact behavior (no default override here; out_tokens might be None upstream)
-        out_tokens = max_tokens or 16384
+        out_tokens = max_tokens 
 
         def build_model(tokens: int):
             cfg: Dict[str, Any] = {
@@ -481,11 +484,10 @@ class LLMClientAdapter:
                 return text2
 
         fr2 = getattr(resp2.candidates[0], "finish_reason", None) if getattr(resp2, "candidates", None) else None
-        # keep your existing strict behavior
         raise RuntimeError(f"Gemini native: empty after fallback. finish_reason={fr2}")
 
     def _extract_gemini_text_or_retry(self, resp, contents, build_model, out_tokens) -> str:
-        # Your exact working logic
+        
         if not getattr(resp, "candidates", None):
             pf = getattr(resp, "prompt_feedback", None)
             raise RuntimeError(f"Empty Gemini response. prompt_feedback={pf}")
@@ -494,13 +496,16 @@ class LLMClientAdapter:
         fr = getattr(cand, "finish_reason", None)
 
         parts = getattr(cand.content, "parts", []) if cand and cand.content else []
-        buf = [getattr(p, "text", "") for p in (parts or []) if isinstance(getattr(p, "text", None), str)]
-        if any(buf):
+        buf = []
+        for p in parts or []:
+            t = getattr(p, "text", None)
+            if isinstance(t, str):
+                buf.append(t)
+        if buf:
             return "".join(buf)
 
         if _is_max_tokens(fr):
-            new_tokens = 16384
-            logger.info(f"[Gemini native] MAX_TOKENS; retrying with max_output_tokens={new_tokens}")
+            new_tokens = 65536
             model2 = build_model(new_tokens)
             resp2 = model2.generate_content(contents)
             if getattr(resp2, "candidates", None):

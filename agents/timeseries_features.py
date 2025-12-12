@@ -290,7 +290,7 @@ def _chat_json_required(
     json_schema: dict,
     *,
     temperature: float = 0.0,
-    max_tokens: int = 600,
+    max_tokens: int = 1000,
     use_json_mode: bool = True,
     max_retries: int = 2,
 ) -> dict:
