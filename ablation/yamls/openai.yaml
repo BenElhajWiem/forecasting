@@ -1,0 +1,53 @@
+# ==========================
+# OpenAI experiments
+# ==========================
+experiments_openai:
+
+  - id: FULL_openai
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+  
+  - id: L1_summarizer_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"
+
+  - id: L1_stats_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_horizon_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_pattern_openai
+    seeds: [7]
+    setup:
+      model: "openai-mini"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"

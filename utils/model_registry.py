@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 
 import os, json, time, logging
 logger = logging.getLogger(__name__)
@@ -12,7 +12,9 @@ from openai import OpenAI
 from openai import BadRequestError 
 import google.generativeai as genai 
 
-# ---------- Model registry ----------
+# -------------------------
+# Registry
+# -------------------------
 @dataclass
 class ModelSpec:
     provider: str                
@@ -176,7 +178,6 @@ class LLMClientAdapter:
       - OpenAI-compat providers via OpenAI client
       - Gemini native via google-generativeai
     """
-
     def __init__(self, spec: ModelSpec):
         self.spec = spec
         api_key = spec.api_key
@@ -234,8 +235,6 @@ class LLMClientAdapter:
     ) -> Dict[str, Any]:
         txt = self.chat(messages, temperature=temperature, max_tokens=max_tokens, model_override=model_override)
         return _json_loads_loose(txt)
-    
-
 
     # ---------- OpenAI-compat helpers ----------
     def _chat_openai_compat(

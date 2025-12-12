@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 import json
 import math
+import time
+import random
 
 # =======================
 # 1) Configuration
@@ -58,6 +60,52 @@ def downsample_to_thumbnail(s: pd.Series, max_points: int) -> List[float]:
         return [float(x) for x in s.values]
     step = int(np.ceil(len(s) / max_points))
     return [float(x) for x in s.iloc[::step].values[:max_points]]
+
+# =======================
+# 0) LLM retry helper (loop forever on transient errors)
+# =======================
+def call_llm_until_success(fn, *, max_backoff: float = 60.0):
+    """
+    Repeatedly execute `fn()` (an LLM call) until it succeeds.
+    Each attempt should be *individually* bounded by a timeout
+    inside the adapter (e.g., 30–120 seconds).
+
+    We only retry on transient / overload / timeout errors.
+    Any other exception is raised immediately.
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return fn()
+        except Exception as e:
+            msg = str(e).lower()
+
+            # Only retry on transient server conditions
+            transient = any(
+                key in msg
+                for key in (
+                    "timeout",
+                    "deadline",
+                    "504",
+                    "503",
+                    "overloaded",
+                    "temporarily unavailable",
+                    "server error",
+                )
+            )
+            if not transient:
+                # Real bug / validation error, don't spin forever
+                raise
+
+            # Exponential-ish backoff with jitter
+            sleep = min(max_backoff, 2 * attempt) + random.random()
+            print(
+                f"[pattern_agent] transient LLM error (attempt {attempt}): {e}. "
+                f"Retrying in {sleep:.1f}s..."
+            )
+            time.sleep(sleep)
+            # loop continues
 
 # =======================
 # 3) Numeric feature builders (lightweight)
@@ -225,14 +273,19 @@ EVIDENCE:
 """
 
     messages = [{"role":"system","content":system},{"role":"user","content":user}]
-    # We expect JSON back
-    out = adapter.chat_json_loose(
-        messages,
-        temperature=lcfg.temperature,
-        max_tokens=lcfg.max_tokens_out,
-        model_override=(lcfg.model_override or lcfg.model),
-        strict_json_first=True,
-    )
+    
+    def _invoke():
+        return adapter.chat_json_loose(
+            messages,
+            temperature=lcfg.temperature,
+            max_tokens=(lcfg.max_tokens_out or 800),   # keep each answer bounded
+            model_override=(lcfg.model_override or lcfg.model),
+            strict_json_first=True,
+        )
+
+    # Loop forever on transient timeouts / 503 / overloaded, but keep each call bounded
+    out = call_llm_until_success(_invoke)
+
     return out if isinstance(out, dict) else {"error": "LLM did not return JSON"}
 
 # =======================

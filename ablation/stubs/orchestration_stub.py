@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 import pandas as pd
+import time, random 
 
 # --- Tracing helpers ---
 from ablation.utils.tracing import Timer, jsonable, topk_by_block
@@ -18,6 +19,53 @@ from agents.summarization import summarize_from_retrieval_strategy, SummarizeCon
 from agents.pattern_detection import detect_patterns_with_llm_after_retrieval, PatternConfig
 from agents.statistics_calculation import StatisticalAgent, StatConfig
 from agents.forecast_narrative import forecast_with_llm, ForecastConfig
+
+# -----------------------------------------
+# Helper: retry LLM stages until success
+# -----------------------------------------
+def call_llm_stage_until_success(
+    stage_name: str,
+    fn,
+    max_backoff: float = 60.0,
+):
+    """
+    Repeatedly execute `fn()` (an LLM stage) until it succeeds.
+    Retries only on transient API issues: timeouts, DeadlineExceeded,
+    503/504, "overloaded", etc.
+
+    Each *internal* LLM call should still have its own per-call timeout
+    configured inside the adapter.
+    """
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return fn()
+        except Exception as e:
+            msg = str(e).lower()
+            transient = any(
+                key in msg
+                for key in (
+                    "timeout",
+                    "deadline",
+                    "504",
+                    "503",
+                    "overloaded",
+                    "temporarily unavailable",
+                    "server error",
+                )
+            )
+            if not transient:
+                # Real bug / validation error: don't spin forever
+                raise
+
+            sleep = min(max_backoff, 2 * attempt) + random.random()
+            print(
+                f"[orchestration] transient LLM error in '{stage_name}' "
+                f"(attempt {attempt}): {e} – retrying in {sleep:.1f}s..."
+            )
+            time.sleep(sleep)
+            # loop continues
 
 # -----------------------------------------
 # Instrumented orchestration 
@@ -184,24 +232,32 @@ def orchestration_agent(*,
     t = Timer()
     sector = "energy"
     if use_sector_detector:
+        def _sector():
+            return SectorDetector().classify(adapter, user_query)
+
         if hasattr(adapter, "stage"):
             with adapter.stage("sector"):
-                sector = SectorDetector().classify(adapter, user_query)
+                sector = call_llm_stage_until_success("sector", _sector)
         else:
-            sector = SectorDetector().classify(adapter, user_query)
+            sector = call_llm_stage_until_success("sector", _sector)
+
     trace["sector"] = sector
     trace["timings_ms"]["sector"] = t.ms()
 
     # 3) Horizon classification
     t = Timer()
     hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", reference_time="2025/04/01 00:00:00")
-    horizon = "short_term"
+    horizon = "long_term"
     if use_horizon_classifier:
+        def _horizon():
+            return classify_horizon(adapter, user_query, df, hcfg)
+
         if hasattr(adapter, "stage"):
             with adapter.stage("horizon"):
-                horizon = classify_horizon(adapter, user_query, df, hcfg)
+                horizon = call_llm_stage_until_success("horizon", _horizon)
         else:
-            horizon = classify_horizon(adapter, user_query, df, hcfg)
+            horizon = call_llm_stage_until_success("horizon", _horizon)
+
     trace["horizon"] = horizon
     trace["timings_ms"]["horizon"] = t.ms()
 
@@ -215,16 +271,29 @@ def orchestration_agent(*,
     t = Timer()
     if hasattr(adapter, "stage"):
         with adapter.stage("features_timeseries"):
-            timeseries_filters = TimeSeriesFilterExtractor(adapter).extract(user_query, now_iso=now_iso)
+            timeseries_filters = call_llm_stage_until_success(
+                "features_timeseries",
+                lambda: TimeSeriesFilterExtractor(adapter).extract(user_query, now_iso=now_iso),
+            )
         with adapter.stage("features_energy"):
-            domain_filters = EnergyFilterExtractor(adapter).extract(user_query)
+            domain_filters = call_llm_stage_until_success(
+                "features_energy",
+                lambda: EnergyFilterExtractor(adapter).extract(user_query),
+            )
     else:
-        timeseries_filters = TimeSeriesFilterExtractor(adapter).extract(user_query, now_iso=now_iso)
-        domain_filters = EnergyFilterExtractor(adapter).extract(user_query)
+        timeseries_filters = call_llm_stage_until_success(
+            "features_timeseries",
+            lambda: TimeSeriesFilterExtractor(adapter).extract(user_query, now_iso=now_iso),
+        )
+        domain_filters = call_llm_stage_until_success(
+            "features_energy",
+            lambda: EnergyFilterExtractor(adapter).extract(user_query),
+        )
 
     filters = {**(timeseries_filters or {}), **(domain_filters or {})}
     trace["filters"] = jsonable(filters)
     trace["timings_ms"]["feature_extract"] = t.ms()
+    print("🔍_____________________Extracted filters:")
 
     # 6) Retrieval (no LLM)
     t = Timer()
@@ -265,6 +334,7 @@ def orchestration_agent(*,
                 metrics=filters.get("metrics"),
             )
     trace["timings_ms"]["summarization"] = t.ms()
+    print("📝_____________________Summarization Done")
 
     # 8) Statistics (non-LLM)
     t = Timer()
@@ -273,6 +343,7 @@ def orchestration_agent(*,
         stats_out = StatisticalAgent(StatConfig(tz="Australia/Sydney")).run(retrieval_out)
     trace["statistics"] = jsonable(getattr(stats_out, "summary", stats_out))
     trace["timings_ms"]["statistics"] = t.ms()
+    print("📊_____________________Statistics calculated")
 
     # 9) Pattern detection (LLM stage)
     t = Timer()
@@ -291,6 +362,8 @@ def orchestration_agent(*,
         pass
     trace["patterns"] = jsonable({"recent_window": recent_llm}) if patterns else {}
     trace["timings_ms"]["patterns"] = t.ms()
+
+    print("🧩_____________________Pattern detection Done")
 
     # 9) Forecast (LLM stage)
     t = Timer()

@@ -1,0 +1,63 @@
+global:
+  seeds: [7, 21, 42, 63, 84]   # 5 runs
+  backtest:
+    start: "2025-04-30"
+    end:   "2025-07-30"
+    freq: "1M"           # Monthly backtest frequency
+    warmup_months: 1
+
+# ==========================
+# Claude experiments
+# ==========================
+
+experiments_claude:
+
+
+  - id: L1_summarizer_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "off"
+
+  - id: L1_pattern_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: false
+      summarization: "16sent"
+
+  - id: L1_horizon_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: false
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: L1_stats_claude
+    seeds: [7]
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "off"
+      pattern_detection: true
+      summarization: "16sent"
+
+  - id: FULL_claude
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
