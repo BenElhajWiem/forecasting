@@ -1,6 +1,7 @@
 .vscode
 forecasting
 .env
+.gitignore
 *.csv
 .DS_Store
 ablation/Gemini
@@ -8,4 +9,5 @@ ablation/Deepseek
 ablation/OpenAI
 ablation/Claude
 ablation/queries
+data.ipynb
 data.ipynb
