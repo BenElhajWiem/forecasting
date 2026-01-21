@@ -31,39 +31,38 @@ The system reformulates time series forecasting as a **structured reasoning work
 ## Repository Structure
 .
 ├── ablation/
-│ ├── Claude/ # Ablation outputs (Claude)
-│ ├── Deepseek/ # Ablation outputs (DeepSeek)
-│ ├── Gemini/ # Ablation outputs (Gemini)
-│ ├── OpenAI/ # Ablation outputs (OpenAI)
-│ ├── eval/ # Evaluation utilities
-│ ├── queries/ # Query sets used for evaluation
-│ ├── stubs/ # Stubs/mocks for controlled experiments
-│ ├── utils/ # Ablation helpers
-│ └── yamls/ # Experiment configurations
+│   ├── Claude/                 # Ablation outputs (Claude)
+│   ├── Deepseek/               # Ablation outputs (DeepSeek)
+│   ├── Gemini/                 # Ablation outputs (Gemini)
+│   ├── OpenAI/                 # Ablation outputs (OpenAI)
+│   ├── eval/                   # Evaluation utilities
+│   ├── queries/                # Query sets used for evaluation
+│   ├── stubs/                  # Stubs/mocks for controlled experiments
+│   ├── utils/                  # Ablation helpers
+│   └── yamls/                  # Experiment configurations
 │
 ├── agents/
-│ ├── orchestration_agent.py # Central orchestrator
-│ ├── sector_detector.py # Domain detection using LLMs
-│ ├── timeseries_features.py # Temporal parsing and filters using LLMs
-│ ├── energy_features.py # Energy-domain feature extraction using LLMs
-│ ├── retrieval.py # Deterministic DataFrame retrieval
-│ ├── statistics_calculation.py # Tool-based statistics
-│ ├── summarization.py # Token-efficient summarization using LLMs
-│ ├── pattern_detection.py # Trend/seasonality/anomaly detection using LLMs
-│ ├── forecast_narrative.py # Forecast synthesis and formatting using LLMs
-│ └── redirecting_agent.py # Horizon routing / fallback logic using LLMs
+│   ├── orchestration_agent.py  # Central orchestrator
+│   ├── sector_detector.py      # Domain detection using LLMs
+│   ├── timeseries_features.py  # Temporal parsing and filters using LLMs
+│   ├── energy_features.py      # Energy-domain feature extraction
+│   ├── retrieval.py            # Deterministic DataFrame retrieval
+│   ├── statistics_calculation.py # Tool-based statistics
+│   ├── summarization.py        # Token-efficient summarization
+│   ├── pattern_detection.py    # Trend/seasonality/anomaly detection
+│   ├── forecast_narrative.py   # Forecast synthesis and formatting
+│   └── redirecting_agent.py    # Horizon routing / fallback logic
 │
-├── data/ # Dataset and processed data
-|
-├── utils/ # Shared utilities
+├── data/                       # Dataset and processed data
+├── utils/                      # Shared utilities
 │
-├── ablate_model.py # Run ablation for a single configuration
-├── ablate_parallel.py # Parallel ablation runs
-├── interface.py # Lightweight interactive interface
-├── main.py # Main end-to-end entry point
+├── ablate_model.py             # Run ablation for a single configuration
+├── ablate_parallel.py          # Parallel ablation runs
+├── interface.py                # Lightweight interactive interface
+├── main.py                     # Main end-to-end entry point
 │
 ├── requirements.txt
-├── .env # Environment variables 
+├── .env                        # Environment variables (not committed)
 └── README.md
 
 ---
