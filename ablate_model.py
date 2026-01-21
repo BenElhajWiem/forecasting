@@ -37,9 +37,9 @@ log = get_logger("ablate")
 # ---------------------------------------------------------------------
 # default paths and constants
 # ---------------------------------------------------------------------
-DEFAULT_YAML = "ablation/yamls/claude.yaml"
-DEFAULT_QUERIES = "ablation/queries/queries_eval_5.json"
-OUTPUT_ROOT = "ablation/Claude/5_Ablation_Gemini"
+DEFAULT_YAML = "ablation/yamls/deepseek.yaml"
+DEFAULT_QUERIES = "ablation/queries/rest.json"
+OUTPUT_ROOT = "ablation/Deepseek/rest_Deepseek_nsw"
 
 # ---------------------------------------------------------------------
 # Helpers

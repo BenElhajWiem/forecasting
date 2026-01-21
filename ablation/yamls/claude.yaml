@@ -12,6 +12,14 @@ global:
 
 experiments_claude:
 
+  - id: FULL_claude
+    setup:
+      model: "claude-api"
+      sector_detector: true
+      horizon_classifier: true
+      stats_mode: "summary_acf"
+      pattern_detection: true
+      summarization: "16sent"
 
   - id: L1_summarizer_claude
     seeds: [7]
@@ -50,14 +58,5 @@ experiments_claude:
       sector_detector: true
       horizon_classifier: true
       stats_mode: "off"
-      pattern_detection: true
-      summarization: "16sent"
-
-  - id: FULL_claude
-    setup:
-      model: "claude-api"
-      sector_detector: true
-      horizon_classifier: true
-      stats_mode: "summary_acf"
       pattern_detection: true
       summarization: "16sent"
