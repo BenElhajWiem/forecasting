@@ -14,7 +14,7 @@ from openai import BadRequestError
 import tiktoken
 import google.generativeai as genai
 
-from ablation.utils.cost import estimate_cost  # <-- adjust if your path differs
+from experiments.utils.cost import estimate_cost  # <-- adjust if your path differs
 
 # -------------------------
 # Registry
