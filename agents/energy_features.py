@@ -1,3 +1,20 @@
+"""
+Schema-constrained extraction of energy-domain filters from natural-language queries.
+
+This module provides a lightweight, provider-agnostic LLM-based extractor that:
+- extracts ONLY energy constraints (regions, metrics, optional period_type)
+- enforces strict JSON output using a minimal schema validator + repair retries
+- normalizes regions/metrics to canonical AEMO codes
+
+Public API
+----------
+- EnergyFilterExtractor.extract(user_query) -> {"regions": [...], "metrics": [...], "notes": Optional[str]}
+
+Notes
+-----
+Temporal constraints (timestamps, horizons, date ranges) are intentionally out of scope.
+"""
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
@@ -23,6 +40,23 @@ METRIC_ALIASES: Dict[str, str] = {
 ALLOWED_METRICS = {"TOTALDEMAND","RRP"}
 
 def _norm_regions(regions: List[str]) -> List[str]:
+    """
+    Normalize region identifiers to canonical AEMO region codes.
+
+    This function maps a list of potentially noisy or user-provided region strings
+    (e.g., "NSW", "Sydney", "vic.", "tasmania") to canonical region codes used in
+    downstream processing (e.g., "NSW1", "VIC1", "TAS1").
+
+    Parameters
+    ----------
+    regions : List[str]
+        Raw region-like strings extracted from user text or other upstream steps.
+
+    Returns
+    -------
+    List[str]
+        Canonicalized region codes with stable ordering and no duplicates.
+    """
     out, seen = [], set()
     for r in regions or []:
         key = str(r).strip().lower()
@@ -32,6 +66,24 @@ def _norm_regions(regions: List[str]) -> List[str]:
     return out
 
 def _norm_metrics(metrics: List[str]) -> List[str]:
+    """
+    Normalize metric identifiers to the allowed energy forecasting targets.
+
+    This function maps metric synonyms to the two supported canonical metrics:
+    - "TOTALDEMAND" (e.g., "demand", "load", "MW")
+    - "RRP" (e.g., "price", "$/MWh", "spot price")
+
+    Parameters
+    ----------
+    metrics : List[str]
+        Raw metric-like strings extracted from user text or other upstream steps.
+
+    Returns
+    -------
+    List[str]
+        Canonical metric names restricted to {"TOTALDEMAND","RRP"} with stable
+        ordering and no duplicates.
+    """
     out, seen = [], set()
     for m in (metrics or []):
         k = str(m).strip().lower()
@@ -41,7 +93,7 @@ def _norm_metrics(metrics: List[str]) -> List[str]:
     return out
 
 # -------------------------
-# Lightweight schema + JSON enforcement
+# JSON enforcement
 # -------------------------
 def _light_validate(obj: dict, schema: dict) -> List[str]:
     errs: List[str] = []
@@ -110,9 +162,29 @@ def _chat_json_required(
     max_retries: int = 2,
 ) -> dict:
     """
-    Enforce JSON via:
-      1) ask provider for JSON mode (adapter strips if unsupported)
-      2) salvage -> schema-validate -> retry with a concise fix prompt
+    Call an LLM and strictly enforce a JSON-object response matching a schema.
+
+    Parameters
+    ----------
+    adapter : LLMClientAdapter
+        Adapter that exposes a `chat(messages, ...) -> str` interface.
+    messages : List[Dict[str, str]]
+        Chat messages in OpenAI-style format: [{"role":"system|user|assistant","content": "..."}].
+    json_schema : dict
+        JSON schema-like dict (subset) used by _light_validate().
+    temperature : float, default=0.0
+        Decoding temperature. Keep at 0.0 for deterministic extraction.
+    max_tokens : int, default=800
+        Output token budget for the extraction call.
+    use_json_mode : bool, default=True
+        If True, request JSON mode (where supported) via response_format.
+    max_retries : int, default=2
+        Number of repair attempts after the initial call.
+
+    Returns
+    -------
+    dict
+        A JSON object satisfying the schema.
     """
     rf = {"type": "json_object"} if use_json_mode else None
     err_last = None
@@ -166,7 +238,19 @@ ENERGY_JSON_SCHEMA = {
 }
 
 class EnergyFilterExtractor:
-    """Extracts ONLY energy-domain constraints: regions, metrics (+period type if mentioned)."""
+    """
+    Extract and normalize energy-domain constraints (regions/metrics/period_type) from a user query.
+
+    Output contract
+    ---------------
+    Returns a dict:
+      - regions: canonical region codes (e.g., ["NSW1","VIC1"])
+      - metrics: subset of ["TOTALDEMAND","RRP"]
+      - notes: optional string; if period_type was present, it is appended as "PERIODTYPE=<...>"
+
+    Temporal constraints are intentionally not extracted here.
+    """
+
     def __init__(self, adapter: LLMClientAdapter, cfg: Optional[EnergyConfig] = None):
         self.adapter = adapter
         self.cfg = cfg or EnergyConfig()

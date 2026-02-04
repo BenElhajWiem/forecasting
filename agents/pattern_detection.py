@@ -9,9 +9,6 @@ import math
 import time
 import random
 
-# =======================
-# 1) Configuration
-# =======================
 @dataclass
 class PatternConfig:
     tz: str = "Australia/Sydney"
@@ -40,9 +37,6 @@ class LLMConfig:
     json_mode: bool = True              # we want JSON labels back
     model_override: Optional[str] = None
 
-# =======================
-# 2) Small utilities
-# =======================
 def localize_to_timezone(series: pd.Series, tz: str) -> pd.Series:
     s = pd.to_datetime(series, errors="coerce", utc=False)
     if getattr(s.dt, "tz", None) is None:
@@ -61,9 +55,7 @@ def downsample_to_thumbnail(s: pd.Series, max_points: int) -> List[float]:
     step = int(np.ceil(len(s) / max_points))
     return [float(x) for x in s.iloc[::step].values[:max_points]]
 
-# =======================
-# 0) LLM retry helper (loop forever on transient errors)
-# =======================
+
 def call_llm_until_success(fn, *, max_backoff: float = 60.0):
     """
     Repeatedly execute `fn()` (an LLM call) until it succeeds.
@@ -107,9 +99,7 @@ def call_llm_until_success(fn, *, max_backoff: float = 60.0):
             time.sleep(sleep)
             # loop continues
 
-# =======================
-# 3) Numeric feature builders (lightweight)
-# =======================
+
 def compute_trend_slope_per_hour(s: pd.Series, resample: str) -> Optional[float]:
     """OLS slope on resampled mean series (value per hour)."""
     y = s.resample(resample).mean().dropna()
@@ -169,9 +159,7 @@ def compute_hourly_weekday_profiles(df: pd.DataFrame, metric: str, tz: str) -> D
     return {"hourly_median": [float(v) if pd.notna(v) else None for v in hourly],
             "weekday_median": [float(v) if pd.notna(v) else None for v in weekday]}
 
-# =======================
-# 4) Evidence builder per origin/region/metric
-# =======================
+
 def build_llm_evidence_for_origin(df: pd.DataFrame, pcfg: PatternConfig) -> Dict[str, Any]:
     """Compute minimal numeric features the LLM will interpret into labels."""
     out: Dict[str, Any] = {"summary": {}, "items": []}
@@ -208,9 +196,6 @@ def build_llm_evidence_for_origin(df: pd.DataFrame, pcfg: PatternConfig) -> Dict
             })
     return out
 
-# =======================
-# 5) LLM: classify patterns from evidence
-# =======================
 def ask_llm_to_label_patterns(
     adapter,
     evidence: Dict[str, Any],
@@ -288,9 +273,6 @@ EVIDENCE:
 
     return out if isinstance(out, dict) else {"error": "LLM did not return JSON"}
 
-# =======================
-# 6) End-to-end: detect patterns after retrieval
-# =======================
 def detect_patterns_with_llm_after_retrieval(
     adapter,
     retrieval_out: Dict[str, Any],
