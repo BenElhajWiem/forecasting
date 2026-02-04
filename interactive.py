@@ -18,14 +18,14 @@ st.markdown(
     .stButton>button {border-radius: 10px; background-color: #e91e63; color: white; font-weight: 600;}
     .stTextArea textarea {border-radius: 10px;}
     </style>
-    <div class="title">Forecasting with Language</div>
-    <div class="subtitle">Choose a model, Enter a query, and Visualize the result.</div>
+    <div class="title">Forecasting As Reasoning</div>
+    <div class="subtitle">Choose a model, enter a query and see the forecasts.</div>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("Forecasting with Language")
-st.caption("Choose a model, enter a query, , see the result.")
+st.title("Forecasting As Reasoning")
+st.caption("Choose a model, enter a query and see the forecasts.")
 
 # --- MODEL SELECTION ---
 registry = Registry()

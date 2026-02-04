@@ -17,7 +17,6 @@ from utils.model_registry import *
 
 from typing import Any, Dict, Optional
 
-
 def orchestration_agent(*,
     user_query: str,
     adapter,                     
@@ -40,7 +39,6 @@ def orchestration_agent(*,
     sector_detector = SectorDetector()
 
 
-
     # 1) Load & preprocess
     loader = ElectricityDataLoader(csv_path)
     df = loader.load_and_preprocess()
@@ -50,7 +48,7 @@ def orchestration_agent(*,
     print("🏷️_____________________Sector classification:", sector)
 
     # 3) Route classification
-    hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", reference_time="2025/04/01 00:00:00")
+    hcfg = HorizonConfig(timestamp_col="SETTLEMENTDATE", reference_time="2025/05/01 00:00:00")
     horizon = classify_horizon(adapter, user_query, df, hcfg)
     print("🧭_____________________Forecast type classification:", horizon)
 

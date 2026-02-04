@@ -14,6 +14,22 @@ class SectorConfig:
 
 
 class SectorDetector:
+    """
+    LLM-based multiclass sector classifier with strict, single-token output contract.
+
+    This classifier uses a prompt that instructs the LLM to output *exactly one*
+    label from `cfg.sectors` (no punctuation, no explanations, no JSON). The returned
+    value is then validated locally (case-insensitive). If validation fails, the
+    configured fallback label is returned.
+
+    Notes
+    -----
+    - If you want maximum determinism, keep `temperature=0.0` and consider
+      setting provider-specific parameters (e.g., top_p=1.0) inside the adapter.
+    - Ensure your few-shot examples only use labels that exist in `cfg.sectors`.
+      Otherwise, you'll systematically trigger fallbacks.
+    """
+
     def __init__(self, cfg: SectorConfig = SectorConfig()):
         self.cfg = cfg
 
@@ -23,7 +39,7 @@ class SectorDetector:
         """
         # 1) Build prompt
         system =(
-            "You are a a deterministic multiclass classifier.\n"
+            "You are a deterministic multiclass classifier.\n"
             f"Given a query output EXACTLY one word from the allowed list: {', '.join(self.cfg.sectors)}.\n"
             "Rules:\n"
             "1) No punctuation, no quotes, no explanations, no JSON.\n"

@@ -11,10 +11,10 @@ def main():
     logger.info("_____________________Starting forecasting_____________________")
 
     registry = Registry()
-    spec = registry.presets["gemini-flash-native"] # "gemini-flash-native" | "deepseek-chat" | "openai-mini" | "gemini-flash" | "claude-api"
+    spec = registry.presets["deepseek-chat"] # "gemini-flash-native" | "deepseek-chat" | "openai-mini" | "gemini-flash" | "claude-api"
     adapter = LLMClientAdapter(spec)
 
-    user_query = "Forecast 48-hour every 2 hours forecast for QLD, beginning at September 22, 2025 at 2am, including TOTALDEMAND and RRP."
+    user_query = "Generate a 24-hour forecast at 2-hour intervals for Queensland, starting on September 22, 2025 at 2PM, including electricity demand and market price."
     result = orchestration_agent(user_query=user_query, adapter=adapter)
 
     logger.info("_____________________Orchestration completed_____________________")

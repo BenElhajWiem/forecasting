@@ -1,6 +1,3 @@
-# ==================================
-# Retrieval — horizon-aware with similarity scoring
-# ==================================
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Tuple, Literal
@@ -11,7 +8,7 @@ import numpy as np
 Horizon = Literal["short_term", "mid_term", "long_term"]
 
 # -----------------------------
-# Config (now includes ablation toggles & weights)
+# Configuration
 # -----------------------------
 @dataclass
 class RetrievalConfig:
@@ -319,7 +316,7 @@ def _slice_same_week_prior_years(
     return pd.concat(parts, ignore_index=True) if parts else df.iloc[0:0]
 
 # -----------------------------
-# NEW: Short-term analogs — same hour on previous N days
+# same hour on previous N days
 # -----------------------------
 def _slice_same_hour_previous_days(
     df: pd.DataFrame,
@@ -355,7 +352,7 @@ def _slice_same_hour_previous_days(
     return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
 
 # -----------------------------
-# NEW: Same weekday/hour across recent weeks (profiles)
+# Same weekday/hour across recent weeks
 # -----------------------------
 def _slice_same_weekday_recent_weeks(
     df: pd.DataFrame,
@@ -388,7 +385,7 @@ def _slice_same_weekday_recent_weeks(
     return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
 
 # -----------------------------
-# NEW: Long-term analogs — same week-of-year across prior years (time-anchored window)
+# same week-of-year across prior years (time-anchored window)
 # -----------------------------
 def _slice_same_woy_prior_years(
     df: pd.DataFrame,
@@ -428,7 +425,7 @@ def _slice_same_woy_prior_years(
     return pd.concat(parts, ignore_index=True) if parts else work.iloc[0:0]
 
 # -----------------------------
-# NEW: Same month across years (± buffer days)
+# Same month across years (± buffer days)
 # -----------------------------
 def _slice_same_month_prev_years(
     df: pd.DataFrame,
@@ -522,6 +519,7 @@ def retrieve_context(
       - Same weekday/hour profiles across B recent weeks
       - Same month across prior My years (±buffer)
       - Prior years: same week window (±sameweek_days)
+      - Prior years: same date/time window (tight)
 
     LONG_TERM :
       - Same month across last Y years (±buffer)
@@ -698,5 +696,4 @@ def retrieve_context(
         "macro_trend_blocks": macro_trend_blocks,
         # Scored & deduped union to feed the ForecastingAgent / prompt builder
         "combined": combined,
-        "meta": meta,
-    }
+        "meta": meta,}
