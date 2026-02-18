@@ -1,11 +1,10 @@
-# utils/tracing.py
 from __future__ import annotations
 import time, numbers
 from typing import Any, Dict, Optional, List
 import pandas as pd
 import numpy as np
 
-# Keep a canonical order of retrieval blocks for previews & counts
+
 BLOCK_KEYS = [
     "recent_window",
     "same_hour_previous_days",
