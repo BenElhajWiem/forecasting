@@ -101,20 +101,6 @@ python main.py
 ### Interactive Mode
 streamlit run interface.py
 
-## Forecasting Workflow (Per Query)
-
-- **Orchestrator** (agent routing, state propagation, deterministic logging, and ablation control)
-- Sector detection (optional, multi-domain)
-- Horizon classification (short / mid / long)
-- Feature extraction (temporal + domain filters)
-- Deterministic DataFrame retrieval
-- Statistical grounding (tool-computed)
-- Summarization (context compression)
-- Pattern detection (trend, seasonality, anomalies)
-- Forecast synthesis (prediction + rationale)
-
-All intermediate artifacts are explicit and inspectable.
-
 ## Ablation Studies
 
 ### Single Configuration

@@ -1,4 +1,3 @@
-# Utility functions for I/O operations in the ablation module.
 from __future__ import annotations
 import os, yaml
 

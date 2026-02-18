@@ -1,4 +1,3 @@
-# Logger utility for the ablation module.
 import logging
 
 def get_logger(name: str = "ablation"):
