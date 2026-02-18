@@ -35,38 +35,43 @@ Across four state-of-the-art LLM backends, we demonstrate that structured retrie
 
 ## Repository Structure
 .
-├── experiments/
-│   ├── Claude/                 # Experiments outputs (Claude)
-│   ├── Deepseek/               # Experiments outputs (DeepSeek)
-│   ├── Gemini/                 # Experiments outputs (Gemini)
-│   ├── OpenAI/                 # Experiments outputs (OpenAI)
-│   ├── eval/                   # Evaluation utilities
-│   ├── queries/                # Query sets used for evaluation
-│   ├── stubs/                  # Stubs/mocks for controlled experiments
-│   ├── utils/                  # Experiment helpers
-│   └── yamls/                  # Experiment configurations
-│   └── scripts/                # Run Experiments
+├── experiments/                
+│   ├── eval/
+│   ├── queries/
+│   ├── stubs/
+│   ├── utils/
+│   └── scripts/
+│
+├── outputs/                   
+│   ├── Claude/
+│   ├── Deepseek/
+│   ├── Gemini/
+│   └── OpenAI/
 │
 ├── agents/
-│   ├── orchestration_agent.py    # Central orchestrator
-│   ├── sector_detector.py        # Domain detection Agent
-│   ├── timeseries_features.py    # Temporal feature extraction Agent
-│   ├── energy_features.py        # Energy-domain feature extraction Agent
-│   ├── retrieval.py              # Deterministic DataFrame retrieval
-│   ├── statistics_calculation.py # Tool-based statistics
-│   ├── summarization.py          # Token-efficient summarization Agent
-│   ├── pattern_detection.py      # Patterns detection Agent
-│   ├── forecast_narrative.py     # Forecasting Agent
-│   └── redirecting_agent.py      # Horizon classification Agent
+│   ├── orchestration_agent.py
+│   ├── sector_detector.py
+│   ├── timeseries_features.py
+│   ├── energy_features.py
+│   ├── summarization.py
+│   ├── pattern_detection.py
+│   ├── forecast_narrative.py
+│   └── redirecting_agent.py
 │
-├── data/                       # Dataset and processed data
-├── utils/                      # Shared utilities
+├── tools/
+│   ├── retrieval.py
+│   └── statistics_calculation.py
 │
-├── interface.py                # Lightweight interactive interface
-├── main.py                     # Main end-to-end entry point
+├── data/
+├── utils/
+│
+├── configs/                    
+├── interface.py
+├── main.py
 │
 ├── requirements.txt
-├── .env                        # Environment variables 
+├── .env.example
+├── .gitignore
 └── README.md
 
 ---

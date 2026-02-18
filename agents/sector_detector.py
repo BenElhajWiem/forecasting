@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
+
+# -----------------------------------------------------------
+# Config
+# -----------------------------------------------------------
 @dataclass
 class SectorConfig:
     sectors: List[str] = (

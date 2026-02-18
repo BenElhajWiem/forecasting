@@ -4,7 +4,9 @@ from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
 import numpy as np
 
-# ===================== Config =====================
+# -----------------------------------------------------------
+# Config
+# -----------------------------------------------------------
 @dataclass
 class StatConfig:
     """Configuration for the Statistical Agent."""
@@ -17,7 +19,9 @@ class StatConfig:
     )
     weighted_by_ret_score: bool = True
 
-# ===================== Time helpers =====================
+# -------------------------
+# helpers
+# -------------------------
 def localize_to_timezone(series: pd.Series, tz: str) -> pd.Series:
     """Return tz-aware timestamps localized to `tz` (no conversion assumed)."""
     s = pd.to_datetime(series, errors="coerce", utc=False)
