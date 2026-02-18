@@ -8,61 +8,65 @@ This repository contains the reference implementation for the paper:
 <p align="center">
   <img src="assets/architecture.png" width="85%" alt="Overview of the retrieval-augmented multi-agent forecasting framework">
 </p>
-The system reformulates time series forecasting as a **structured reasoning workflow** over **deterministically retrieved** historical evidence, coordinated by multiple role-specialized LLM agents. The design emphasizes **interpretability, reproducibility, and ablation-driven analysis**, rather than end-to-end opaque prediction.
+This paper introduced a retrieval-augmented, agent-based framework that reformulates time series forecasting as a structured, language-driven reasoning process over historical temporal evidence. By decomposing forecasting into modular components—including deterministic retrieval, statistical grounding, temporal pattern analysis, data summarization, and synthesis—the proposed system enables interpretable, flexible, and reproducible forecasting in response to natural language queries.
 
 ---
 
 ## Core Principles
 
-- **Deterministic DataFrame Retrieval**  
-  Historical context is retrieved via structured filters (time, region, metric), ensuring exact numerical grounding and reproducibility.
+Our primary contributions are:
 
-- **Tool-Augmented Reasoning**  
-  All numerical operations (statistics, aggregation) are computed via code, not inferred by the LLM.
+- **Forecasting as Deterministic Evidence-Grounded Reasoning.**
+We formalize time series forecasting as a modular reasoning process over deterministically retrieved temporal contexts, rather than as end-to-end parametric sequence modeling. This perspective transforms forecasting from function approximation into structured, interpretable decision-making conditioned on verifiable historical slices.
 
-- **Multi-Agent Decomposition**  
-  Forecasting is decomposed into interpretable agents (feature extraction, retrieval, statistics, summarization, pattern detection, synthesis).
+- **DataFrame-Grounded Retrieval for Numerical Fidelity.**
+We introduce a deterministic, schema-aligned retrieval operator that operates directly on structured time-series tables, avoiding embedding-based similarity search. Unlike vector retrieval, our method guarantees exact timestamp alignment, numerical fidelity, and full reproducibility across executions.
 
-- **Ablation-Ready by Design**  
-  Each agent can be independently disabled to quantify its contribution.
+- **Modular Multi-Agent Forecasting Architecture.**
+We design a coordinated, role-specialized agent framework comprising horizon classification, feature extraction, statistical grounding, summarization, pattern detection, and forecast synthesis under centralized orchestration. This decomposition enables controlled ablation, backend-agnostic evaluation, and transparent intermediate reasoning artifacts.
+
+- **Reproducibility-Centric Evaluation of LLM Forecasting.**
+We introduce a systematic reproducibility protocol that quantifies run-to-run numerical dispersion, coefficient of variation, and worst-step instability under repeated identical executions. This analysis exposes backend-dependent stochasticity and provides an operational perspective on deployment stability.
+
+- **Comprehensive Backend and Component Analysis.**
+Across four state-of-the-art LLM backends, we demonstrate that structured retrieval and statistical grounding materially improve forecasting accuracy and stability relative to prompt-only baselines and component-wise ablations.
 
 ---
 
 ## Repository Structure
 .
-├── ablation/
-│   ├── Claude/                 # Ablation outputs (Claude)
-│   ├── Deepseek/               # Ablation outputs (DeepSeek)
-│   ├── Gemini/                 # Ablation outputs (Gemini)
-│   ├── OpenAI/                 # Ablation outputs (OpenAI)
+├── experiments/
+│   ├── Claude/                 # Experiments outputs (Claude)
+│   ├── Deepseek/               # Experiments outputs (DeepSeek)
+│   ├── Gemini/                 # Experiments outputs (Gemini)
+│   ├── OpenAI/                 # Experiments outputs (OpenAI)
 │   ├── eval/                   # Evaluation utilities
 │   ├── queries/                # Query sets used for evaluation
 │   ├── stubs/                  # Stubs/mocks for controlled experiments
-│   ├── utils/                  # Ablation helpers
+│   ├── utils/                  # Experiment helpers
 │   └── yamls/                  # Experiment configurations
+│   └── scripts/                # Run Experiments
 │
 ├── agents/
-│   ├── orchestration_agent.py  # Central orchestrator
-│   ├── sector_detector.py      # Domain detection using LLMs
-│   ├── timeseries_features.py  # Temporal parsing and filters using LLMs
-│   ├── energy_features.py      # Energy-domain feature extraction
-│   ├── retrieval.py            # Deterministic DataFrame retrieval
+│   ├── orchestration_agent.py    # Central orchestrator
+│   ├── sector_detector.py        # Domain detection Agent
+│   ├── timeseries_features.py    # Temporal feature extraction Agent
+│   ├── energy_features.py        # Energy-domain feature extraction Agent
+│   ├── retrieval.py              # Deterministic DataFrame retrieval
 │   ├── statistics_calculation.py # Tool-based statistics
-│   ├── summarization.py        # Token-efficient summarization
-│   ├── pattern_detection.py    # Trend/seasonality/anomaly detection
-│   ├── forecast_narrative.py   # Forecast synthesis and formatting
-│   └── redirecting_agent.py    # Horizon routing / fallback logic
+│   ├── summarization.py          # Token-efficient summarization Agent
+│   ├── pattern_detection.py      # Patterns detection Agent
+│   ├── forecast_narrative.py     # Forecasting Agent
+│   └── redirecting_agent.py      # Horizon classification Agent
 │
 ├── data/                       # Dataset and processed data
 ├── utils/                      # Shared utilities
 │
-├── ablate_model.py             # Run ablation for a single configuration
-├── ablate_parallel.py          # Parallel ablation runs
 ├── interface.py                # Lightweight interactive interface
 ├── main.py                     # Main end-to-end entry point
 │
 ├── requirements.txt
-├── .env                        # Environment variables (not committed)
+├── .env                        # Environment variables 
 └── README.md
 
 ---
@@ -79,11 +83,10 @@ pip install -r requirements.txt
 
 Create a .env file at the project root:
 
-OPENAI_API_KEY="..."
-DEEPSEEK_API_KEY="..."
-GEMINI_API_KEY="..."
-ANTHROPIC_API_KEY="..."
-
+- OPENAI_API_KEY="..."
+- DEEPSEEK_API_KEY="..."
+- GEMINI_API_KEY="..."
+- ANTHROPIC_API_KEY="..."
 
 ## Running the System
 
@@ -91,7 +94,7 @@ ANTHROPIC_API_KEY="..."
 python main.py
 
 ### Interactive Mode
-python interface.py
+streamlit run interface.py
 
 ## Forecasting Workflow (Per Query)
 
@@ -106,7 +109,6 @@ python interface.py
 - Forecast synthesis (prediction + rationale)
 
 All intermediate artifacts are explicit and inspectable.
-
 
 ## Ablation Studies
 
