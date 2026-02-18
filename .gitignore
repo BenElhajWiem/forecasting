@@ -5,29 +5,29 @@ forecasting
 *.csv
 .DS_Store
 
-experiments/Gemini/1_Ablation_Gemini
-experiments/Gemini/2_Ablation_Gemini
-experiments/Gemini/3_Ablation_Gemini
-experiments/Gemini/4_Ablation_Gemini
-experiments/Gemini/5_Ablation_Gemini
+experiments/outputs/Gemini/1_Ablation_Gemini
+experiments/outputs/Gemini/2_Ablation_Gemini
+experiments/outputs/Gemini/3_Ablation_Gemini
+experiments/outputs/Gemini/4_Ablation_Gemini
+experiments/outputs/Gemini/5_Ablation_Gemini
 
 
-experiments/Deepseek/1_Ablation_Deepseek
-experiments/Deepseek/2_Ablation_Deepseek
-experiments/Deepseek/3_Ablation_Deepseek
-experiments/Deepseek/4_Ablation_Deepseek
-experiments/Deepseek/5_Ablation_Deepseek
-experiments/Deepseek/rest_Deepseek_stat
-experiments/Deepseek/rest_Deepseek
+experiments/outputs/Deepseek/1_Ablation_Deepseek
+experiments/outputs/Deepseek/2_Ablation_Deepseek
+experiments/outputs/Deepseek/3_Ablation_Deepseek
+experiments/outputs/Deepseek/4_Ablation_Deepseek
+experiments/outputs/Deepseek/5_Ablation_Deepseek
+experiments/outputs/Deepseek/rest_Deepseek_stat
+experiments/outputs/Deepseek/rest_Deepseek
 
-experiments/OpenAI/1_Ablation_OpenAI
-experiments/OpenAI/2_Ablation_OpenAI
-experiments/OpenAI/3_Ablation_OpenAI
-experiments/OpenAI/4_Ablation_OpenAI
-experiments/OpenAI/5_Ablation_OpenAI
+experiments/outputs/OpenAI/1_Ablation_OpenAI
+experiments/outputs/OpenAI/2_Ablation_OpenAI
+experiments/outputs/OpenAI/3_Ablation_OpenAI
+experiments/outputs/OpenAI/4_Ablation_OpenAI
+experiments/outputs/OpenAI/5_Ablation_OpenAI
 
-experiments/Claude/1_Ablation_Claude
-experiments/Claude/5_Ablation_Claude
+experiments/outputs/Claude/1_Ablation_Claude
+experiments/outputs/Claude/5_Ablation_Claude
 
 experiments/queries/rest.json
 experiments/queries/queries_eval_1.json
@@ -38,4 +38,4 @@ experiments/queries/queries_eval_5.json
 
 data/data.ipynb
 
-predicted_vs_gt
+experiments/outputs/predicted_vs_gt
