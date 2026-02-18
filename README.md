@@ -36,12 +36,14 @@ Across four state-of-the-art LLM backends, we demonstrate that structured retrie
 
 The repository mirrors the modular architecture described in the paper, with role-specialized agents, deterministic tools, and experiment scripts organized for reproducibility and ablation analysis.
 
+```text
 .
 ├── experiments/                
 │   ├── eval/
 │   ├── queries/
 │   ├── stubs/
 │   ├── utils/
+│   ├── yamls/
 │   └── scripts/
 │
 ├── outputs/                   
@@ -112,6 +114,6 @@ python ablate_parallel.py
 ### Configuration Files
 
 All experiments are driven by YAML files in:
-ablation/yamls/
+experiments/yamls/
 
 Each ablation disables an agent or a tool while keeping other components fixed.
