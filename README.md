@@ -31,9 +31,11 @@ We introduce a systematic reproducibility protocol that quantifies run-to-run nu
 - **Comprehensive Backend and Component Analysis.**
 Across four state-of-the-art LLM backends, we demonstrate that structured retrieval and statistical grounding materially improve forecasting accuracy and stability relative to prompt-only baselines and component-wise ablations.
 
----
-
+--- 
 ## Repository Structure
+
+The repository mirrors the modular architecture described in the paper, with role-specialized agents, deterministic tools, and experiment scripts organized for reproducibility and ablation analysis.
+
 .
 ├── experiments/                
 │   ├── eval/
@@ -56,11 +58,10 @@ Across four state-of-the-art LLM backends, we demonstrate that structured retrie
 │   ├── summarization.py
 │   ├── pattern_detection.py
 │   ├── forecast_narrative.py
-│   └── redirecting_agent.py
-│
-├── tools/
-│   ├── retrieval.py
-│   └── statistics_calculation.py
+│   ├── redirecting_agent.py
+│   └── tools/
+│       ├── retrieval.py
+│       └── statistics_calculation.py
 │
 ├── data/
 ├── utils/
@@ -74,7 +75,6 @@ Across four state-of-the-art LLM backends, we demonstrate that structured retrie
 ├── .gitignore
 └── README.md
 
----
 
 ## Setup
 
