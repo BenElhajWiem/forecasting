@@ -37,3 +37,5 @@ experiments/queries/queries_eval_4.json
 experiments/queries/queries_eval_5.json
 
 data/data.ipynb
+
+predicted_vs_gt
