@@ -1,28 +1,13 @@
-"""
-Schema-constrained extraction of energy-domain filters from natural-language queries.
-
-This module provides a lightweight, provider-agnostic LLM-based extractor that:
-- extracts ONLY energy constraints (regions, metrics, optional period_type)
-- enforces strict JSON output using a minimal schema validator + repair retries
-- normalizes regions/metrics to canonical AEMO codes
-
-Public API
-----------
-- EnergyFilterExtractor.extract(user_query) -> {"regions": [...], "metrics": [...], "notes": Optional[str]}
-
-Notes
------
-Temporal constraints (timestamps, horizons, date ranges) are intentionally out of scope.
-"""
-
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 import json
-
-# bring your adapter
 from utils.model_registry import LLMClientAdapter
 
+
+# -----------------------------------------------------------
+# helpers
+# -----------------------------------------------------------
 REGION_ALIASES: Dict[str, str] = {
     "nsw1":"NSW1","qld1":"QLD1","sa1":"SA1","vic1":"VIC1","tas1":"TAS1",
     "nsw":"NSW1","new south wales":"NSW1","sydney":"NSW1",

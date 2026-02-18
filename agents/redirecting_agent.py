@@ -5,6 +5,10 @@ import pandas as pd
 import json
 from datetime import datetime
 
+
+# -----------------------------------------------------------
+# Config
+# -----------------------------------------------------------
 @dataclass
 class HorizonConfig:
     # Boundaries (in days)

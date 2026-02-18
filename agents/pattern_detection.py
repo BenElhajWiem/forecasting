@@ -1,4 +1,3 @@
-# pattern_agent.py
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
@@ -9,6 +8,9 @@ import math
 import time
 import random
 
+# -----------------------------------------------------------
+# Config
+# -----------------------------------------------------------
 @dataclass
 class PatternConfig:
     tz: str = "Australia/Sydney"

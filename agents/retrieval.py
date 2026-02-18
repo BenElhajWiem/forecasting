@@ -8,7 +8,7 @@ import numpy as np
 Horizon = Literal["short_term", "mid_term", "long_term"]
 
 # -----------------------------
-# Configuration
+# Config
 # -----------------------------
 @dataclass
 class RetrievalConfig:

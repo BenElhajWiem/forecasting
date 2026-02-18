@@ -3,18 +3,15 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Tuple, Callable, Set
 from datetime import datetime, date
 import json, re, itertools
-
-# bring your adapter
 from utils.model_registry import LLMClientAdapter
 
-# Optional holidays provider (pip install holidays)
 try:
     import holidays as _holidays_pkg  # type: ignore
 except Exception:
     _holidays_pkg = None
 
 # -------------------------
-# Shared constants & helpers
+# helpers
 # -------------------------
 DEFAULT_VAGUE_TIME_MAP: Dict[str, Tuple[str, int]] = {
     "early morning": ("07:00:00", 120),
