@@ -76,7 +76,7 @@ The repository mirrors the modular architecture described in the paper, with rol
 ├── .env.example
 ├── .gitignore
 └── README.md
-
+```
 
 ## Setup
 
