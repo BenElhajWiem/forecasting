@@ -51,15 +51,19 @@ def _parse_pred(raw, metric: str) -> float | None:
         # try dict literal first
         try:
             d = ast.literal_eval(raw)
-            if isinstance(d, dict) and metric in d:
+            if isinstance(d, dict):
+                # If dict parsed successfully but metric absent → no prediction for this metric
+                if metric not in d:
+                    return None
                 v = d[metric]
                 if isinstance(v, (int, float)):
                     return float(v)
                 if isinstance(v, list) and v:
                     return float(v[0]) if not isinstance(v[0], list) else float(v[0][0])
+                return None
         except Exception:
             pass
-        # regex fallback
+        # regex fallback (only for non-dict strings)
         nums = re.findall(r"[-+]?\d+(?:\.\d+)?", raw.replace(",", ""))
         if nums:
             return float(nums[0])
@@ -91,7 +95,7 @@ def load_llm_errors(metric: str) -> dict[str, np.ndarray]:
 
 
 def load_llm_errors_by_query(metric: str) -> dict[str, pd.Series]:
-    """Returns {model: Series indexed by query_id of mean normalised abs error}."""
+    """Returns {model: Series indexed by query_id of mean normalised abs error (averaged over seeds)}."""
     out: dict[str, pd.Series] = {}
     for csv_path in sorted(EVAL_DIR.glob("*_eval_with_gt.csv")):
         model = csv_path.stem.replace("_eval_with_gt", "")
@@ -105,13 +109,12 @@ def load_llm_errors_by_query(metric: str) -> dict[str, pd.Series]:
             if gt is not None and pred is not None and abs(gt) > 0:
                 rows.append({
                     "query_id": str(row.get("query_id", row.get("exp_id", "?"))),
-                    "seed": str(row.get("seed", "0")),
                     "err": abs(pred - gt) / abs(gt),
                 })
         if rows:
             tmp = pd.DataFrame(rows)
-            tmp["_key"] = tmp["query_id"] + "__" + tmp["seed"]
-            s = tmp.groupby("_key")["err"].mean()
+            # Average over seeds → one error value per query_id
+            s = tmp.groupby("query_id")["err"].mean()
             out[model] = s
     return out
 
@@ -136,11 +139,13 @@ def load_baseline_errors(metric: str) -> dict[str, pd.Series]:
     out: dict[str, pd.Series] = {}
     for col in baseline_cols:
         sub[col] = pd.to_numeric(sub[col], errors="coerce")
-        valid = sub.dropna(subset=[col])
+        valid = sub.dropna(subset=[col]).copy()
         if valid.empty:
             continue
-        errs = (valid[col] - valid["gt"]).abs() / valid["gt"].abs()
-        s = pd.Series(errs.values, index=valid["query_id"].values, name=col)
+        valid["_err"] = (valid[col] - valid["gt"]).abs() / valid["gt"].abs()
+        # One row per query_id (baselines have no seeds)
+        s = valid.groupby("query_id")["_err"].mean()
+        s.name = col
         out[col] = s
     return out
 

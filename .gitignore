@@ -4,6 +4,7 @@ forecasting
 .gitignore
 *.csv
 .DS_Store
+*.tex
 
 experiments/outputs/Gemini/1_Ablation_Gemini
 experiments/outputs/Gemini/2_Ablation_Gemini
@@ -37,3 +38,11 @@ experiments/queries/queries_eval_4.json
 experiments/queries/queries_eval_5.json
 
 data/data.ipynb
+
+experiments/eval/significance_results
+experiments/eval/predicted_vs_gt
+experiments/eval/analysis.ipynb
+
+lightning_logs
+
+checkpoints
