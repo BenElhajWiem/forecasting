@@ -1,6 +1,6 @@
 """
 Run all classical baselines against the evaluation query set and produce
-a results CSV comparable to the LLM framework outputs.
+a results CSV.
 
 Usage:
     python -m experiments.baselines.run_baselines \

@@ -2,7 +2,6 @@
 Full significance analysis:
   - Bootstrap 95% CIs on MAE/RMSE for every method
   - Wilcoxon signed-rank + Diebold-Mariano for every LLM×baseline pair
-  - Produces LaTeX-ready comparison table
 """
 from __future__ import annotations
 
@@ -162,7 +161,7 @@ def bootstrap_ci(arr: np.ndarray, stat=np.mean, n=NBOOT, ci=CI, seed=SEED):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Diebold-Mariano test (Harvey et al. small-sample correction)
+# Diebold-Mariano test 
 # ─────────────────────────────────────────────────────────────────────────────
 
 def diebold_mariano(e1: np.ndarray, e2: np.ndarray, h: int = 1) -> dict:

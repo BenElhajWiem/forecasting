@@ -4,11 +4,10 @@ Classical forecasting baselines for electricity demand (TOTALDEMAND) and price (
 Baselines implemented:
   - Persistence: predict the last observed value before the query timestamp
   - Seasonal Naive: predict the value observed at the same time one season ago
-      * short-term  → lag 7 days  (same hour, same day-of-week)
-      * mid-term    → lag 28 days (same hour, same weekday ±1 day tolerance)
-      * long-term   → lag 364 days (same hour, ≈ same calendar date last year)
+      * short-term  
+      * mid-term    
+      * long-term   
   - SARIMA: seasonal ARIMA fitted per (region, metric) on the pre-cutoff data
-      * requires statsmodels (pip install statsmodels)
 """
 from __future__ import annotations
 

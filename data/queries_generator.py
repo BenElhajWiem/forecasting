@@ -2,8 +2,7 @@
 # This script generates all evaluation queries for ablation study:
 #  -  daily-level forecasting queries (short/mid/long term)
 #  -  hourly-level forecasting queries (6h, 12h, 24h, 48h horizons)
-#  - Merges them into a master file: queries_eval.json
-#  - All dates cover May–July 2025 across NSW1, VIC1, QLD1, TAS1.
+#  - Merges them into a final file: queries_eval.json
 # ================================================================
 
 
