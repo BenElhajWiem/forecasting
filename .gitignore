@@ -6,6 +6,8 @@ forecasting
 .DS_Store
 *.tex
 
+experiments/outputs
+
 experiments/outputs/Gemini/1_Ablation_Gemini
 experiments/outputs/Gemini/2_Ablation_Gemini
 experiments/outputs/Gemini/3_Ablation_Gemini
