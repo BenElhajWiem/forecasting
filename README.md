@@ -1,9 +1,9 @@
 # Forecasting as Reasoning  
-**Retrieval-Augmented Multi-Agent LLMs for Interpretable Time Series Forecasting**
+**Retrieval-Augmented Multi-Agent LLMs for Time Series Forecasting**
 
 This repository contains the reference implementation for the paper:
 
-> **Forecasting as Reasoning: A Retrieval-Augmented Multi-Agent LLM Framework for Interpretable Time Series Forecasting**
+> **Forecasting as Reasoning: A Retrieval-Augmented Multi-Agent LLM Framework for Time Series Forecasting**
 
 <p align="center">
   <img src="assets/architecture.png" width="85%" alt="Overview of the retrieval-augmented multi-agent forecasting framework">
@@ -40,17 +40,14 @@ The repository mirrors the modular architecture described in the paper, with rol
 .
 ├── experiments/                
 │   ├── eval/
+│   ├── baselines/
+│   ├── outputs/
 │   ├── queries/
 │   ├── stubs/
 │   ├── utils/
 │   ├── yamls/
 │   └── scripts/
 │
-├── outputs/                   
-│   ├── Claude/
-│   ├── Deepseek/
-│   ├── Gemini/
-│   └── OpenAI/
 │
 ├── agents/
 │   ├── orchestration_agent.py
@@ -69,11 +66,11 @@ The repository mirrors the modular architecture described in the paper, with rol
 ├── utils/
 │
 ├── configs/                    
-├── interface.py
+├── interactive.py
 ├── main.py
 │
 ├── requirements.txt
-├── .env.example
+├── .env
 ├── .gitignore
 └── README.md
 ```
@@ -97,11 +94,14 @@ Create a .env file at the project root:
 
 ## Running the System
 
+### Data extraction
+extract_data.ipynb
+
 ### End-to-End Forecasting
 python main.py
 
 ### Interactive Mode
-streamlit run interface.py
+streamlit run interactive.py
 
 ## Ablation Studies
 
