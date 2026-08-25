@@ -115,7 +115,11 @@ def train_tft(metric: str, cutoff_ts: pd.Timestamp) -> TemporalFusionTransformer
         enable_progress_bar=True,
         enable_model_summary=False,
         logger=False,
-        accelerator="auto",
+        # "auto" selects MPS on Apple Silicon, which hits a fatal Metal
+        # buffer-size assertion with pytorch_forecasting's TFT on this
+        # machine (EAAI-26-14664 revision debugging, 2026-08). CPU is slow
+        # but correct; dataset here is small enough (90 days) to be tractable.
+        accelerator="cpu",
         callbacks=[],
     )
     with warnings.catch_warnings():
@@ -182,7 +186,11 @@ def tft_predict_all(queries_csv: str, output_csv: str) -> pd.DataFrame:
             last_idx = encoder_data["time_idx"].iloc[-1]
             future_rows = pd.DataFrame({
                 "time_idx": range(last_idx + 1, last_idx + pred_steps + 1),
-                metric: [np.nan] * pred_steps,
+                # pytorch_forecasting's TimeSeriesDataSet validation rejects NaN
+                # in time_varying_unknown_reals even for the future/decoder
+                # portion of a predict=True dataset; 0.0 is a standard dummy
+                # placeholder here since predict mode never reads these values.
+                metric: [0.0] * pred_steps,
                 "region": region,
                 "time": pd.date_range(
                     last_data_ts + pd.Timedelta("30min"),
@@ -194,7 +202,12 @@ def tft_predict_all(queries_csv: str, output_csv: str) -> pd.DataFrame:
                 pred_dataset = TimeSeriesDataSet.from_dataset(
                     training, pred_data, predict=True, stop_randomization=True)
                 pred_loader = pred_dataset.to_dataloader(train=False, batch_size=1, num_workers=0)
-                raw_preds = model.predict(pred_loader, mode="prediction", return_index=True)
+                # .predict() spins up its own internal Trainer independent of
+                # the one used for .fit() (accelerator="cpu" there does not
+                # carry over here); without this override it defaults to
+                # "auto" and hits the same MPS crash as the training step did.
+                raw_preds = model.predict(pred_loader, mode="prediction", return_index=True,
+                                           trainer_kwargs=dict(accelerator="cpu"))
                 # raw_preds is (n, pred_steps); take the last step
                 pred_norm = float(raw_preds[0][-1, -1] if raw_preds[0].ndim == 2 else raw_preds[0][-1])
                 pred_val = pred_norm * sigma + mu
@@ -210,7 +223,10 @@ def tft_predict_all(queries_csv: str, output_csv: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    # Writes to a separate file (not baseline_results.csv directly) so this
+    # can run concurrently with the other new baseline scripts without a
+    # write-write race; merged into baseline_results.csv afterward.
     tft_predict_all(
         "experiments/baselines/baseline_results.csv",
-        "experiments/baselines/baseline_results.csv",
+        "experiments/baselines/baseline_results_tft.csv",
     )

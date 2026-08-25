@@ -5,6 +5,10 @@ forecasting
 *.csv
 .DS_Store
 *.tex
+tsfm_env
+*.log
+*.pyc
+paper
 
 experiments/outputs
 

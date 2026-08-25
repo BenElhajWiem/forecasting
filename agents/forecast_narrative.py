@@ -124,17 +124,27 @@ def forecast_with_llm(
     temperature: Optional[float] = 0.0,
     max_tokens: Optional[int] = None,
     model_override: Optional[str] = None,
+    critique: Optional[str] = None,
 ) -> str:
     """
     Generate a clear, structured NATURAL-LANGUAGE forecast.
+
+    `critique` (optional): issues raised by the Verification Agent about a
+    prior attempt for this same query. When present, the model is asked to
+    reconcile the forecast with the flagged evidence rather than regenerate
+    from scratch. See agents/verification_agent.py.
     """
     tgt = _derive_targets_from_filters(filters, cfg.tz)
     units_lines = _render_units_lines(tgt["metrics"], cfg.units_map)
 
     summary_block  = summary
-    stats_block    = stats 
+    stats_block    = stats
     patterns_block = patterns
     targets_header = _format_targets_header(tgt, route)
+    critique_block = (
+        f"\nVERIFICATION FEEDBACK ON A PRIOR ATTEMPT (address these explicitly):\n{critique}\n"
+        if critique else ""
+    )
 
     system_msg = (
         "You are a precise time-series forecaster. "
@@ -167,7 +177,7 @@ EVIDENCE (use as-is; do not recalc):
 
 - Detected Patterns:
 {patterns_block}
-
+{critique_block}
 OUTPUT STYLE — NATURAL LANGUAGE ONLY
 - Write a clear **narrative report**.
 - Start with a short overview sentence (region(s), metric(s), window/frequency).

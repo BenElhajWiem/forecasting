@@ -10,8 +10,9 @@ from agents.energy_features import EnergyFilterExtractor
 from agents.retrieval import retrieve_context, RetrievalConfig
 from agents.summarization import summarize_from_retrieval_strategy, SummarizeConfig, AnomalyConfig
 from agents.pattern_detection import detect_patterns_with_llm_after_retrieval, PatternConfig
-from agents.statistics_calculation import StatisticalAgent, StatConfig 
+from agents.statistics_calculation import StatisticalAgent, StatConfig
 from agents.forecast_narrative import forecast_with_llm, ForecastConfig
+from agents.verification_agent import VerificationAgent, VerificationConfig, format_critique
 
 from utils.model_registry import *
 
@@ -19,7 +20,7 @@ from typing import Any, Dict, Optional
 
 def orchestration_agent(*,
     user_query: str,
-    adapter,                     
+    adapter,
     csv_path: str = "data/processed_data.csv",
     retrieval_cfg: Optional[RetrievalConfig] = None,
     summarize_cfg: Optional[SummarizeConfig] = None,
@@ -27,7 +28,13 @@ def orchestration_agent(*,
     pattern_cfg: Optional[PatternConfig] = None,
     narrator_cfg: Optional[ForecastConfig] = None,
     forecast_cfg: Optional[ForecastConfig] = None,
-    route_cfg: Optional[HorizonConfig] = None,) -> Dict[str, Any]:
+    route_cfg: Optional[HorizonConfig] = None,
+    # Opt-in feedback loop (EAAI-26-14664 revision, R3.1): OFF by default so
+    # existing evaluation runs and published numbers remain reproducible
+    # unchanged. See agents/verification_agent.py.
+    enable_verification: bool = False,
+    verification_cfg: Optional[VerificationConfig] = None,
+) -> Dict[str, Any]:
     # defaults
     retrieval_cfg = retrieval_cfg or RetrievalConfig()
     summarize_cfg = summarize_cfg or SummarizeConfig()
@@ -36,7 +43,9 @@ def orchestration_agent(*,
     narrator_cfg  = narrator_cfg  or ForecastConfig()
     forecast_cfg  = forecast_cfg  or ForecastConfig()
     route_cfg     = route_cfg     or HorizonConfig()
+    verification_cfg = verification_cfg or VerificationConfig()
     sector_detector = SectorDetector()
+    verifier = VerificationAgent(verification_cfg) if enable_verification else None
 
 
     # 1) Load & preprocess
@@ -87,8 +96,15 @@ def orchestration_agent(*,
     print("🧩_____________________Pattern detection Done", patterns)
     #patterns=""
 
-    # 8) Forecast
-    forecast = forecast_with_llm (
+    # 10) Forecast, with an optional Verification Agent feedback loop.
+    # Unlike steps 1-9 (a fixed sequential chain), this is a genuine
+    # agent-to-agent loop: the Verification Agent reads the Forecast agent's
+    # output against the Statistical/Pattern evidence and, if it flags an
+    # inconsistency, sends a structured critique back to the Forecast agent
+    # for a bounded number of revisions (see agents/verification_agent.py).
+    verification_history: list = []
+    critique = None
+    forecast = forecast_with_llm(
         adapter=adapter, user_query=user_query,
         summary=summaries,
         stats=stats_out,
@@ -99,4 +115,37 @@ def orchestration_agent(*,
         prior_history=prior_years_same_dates,
         )
     print("🤖_____________________Forecast results", forecast)
+
+    if verifier is not None:
+        for revision in range(verification_cfg.max_revisions + 1):
+            result = verifier.run(adapter, forecast, stats_out, patterns)
+            verification_history.append({
+                "revision": revision,
+                "consistent": result.consistent,
+                "issues": result.issues,
+            })
+            print(f"🔎_____________________Verification (attempt {revision}):",
+                  "OK" if result.consistent else result.issues)
+            if result.consistent or revision == verification_cfg.max_revisions:
+                break
+            critique = format_critique(result)
+            forecast = forecast_with_llm(
+                adapter=adapter, user_query=user_query,
+                summary=summaries,
+                stats=stats_out,
+                patterns=patterns,
+                filters=filters,
+                cfg=forecast_cfg,
+                route=horizon,
+                prior_history=prior_years_same_dates,
+                critique=critique,
+                )
+            print(f"🤖_____________________Revised forecast (attempt {revision + 1}):", forecast)
+
+    if verifier is not None:
+        return {
+            "forecast": forecast,
+            "verification_history": verification_history,
+            "revisions_used": max(0, len(verification_history) - 1),
+        }
     return forecast

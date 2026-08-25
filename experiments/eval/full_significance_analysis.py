@@ -133,7 +133,8 @@ def load_baseline_errors(metric: str) -> dict[str, pd.Series]:
     sub = sub.dropna(subset=["gt"])
     sub = sub[sub["gt"].abs() > 0]
 
-    baseline_cols = [c for c in ["persistence", "seasonal_naive", "sarima", "chronos", "tft"]
+    baseline_cols = [c for c in ["persistence", "seasonal_naive", "sarima", "chronos", "tft", "timesfm", "moirai",
+                                  "ets", "theta", "prophet"]
                      if c in sub.columns]
     out: dict[str, pd.Series] = {}
     for col in baseline_cols:
@@ -185,6 +186,20 @@ def diebold_mariano(e1: np.ndarray, e2: np.ndarray, h: int = 1) -> dict:
     from scipy.stats import norm
     p = 2 * norm.sf(abs(dm))
     return {"statistic": float(dm), "p_value": float(p), "n": int(n)}
+
+
+def holm_bonferroni(pvals: list[float]) -> list[bool]:
+    """Returns per-test reject-null flags at alpha=0.05, Holm step-down procedure."""
+    m = len(pvals)
+    order = sorted(range(m), key=lambda i: pvals[i])
+    reject = [False] * m
+    for rank, idx in enumerate(order):
+        threshold = 0.05 / (m - rank)
+        if pvals[idx] <= threshold:
+            reject[idx] = True
+        else:
+            break  # Holm step-down: stop at first non-rejection
+    return reject
 
 
 def wilcoxon_test(e1: np.ndarray, e2: np.ndarray) -> dict:
@@ -283,6 +298,63 @@ def run_full_analysis():
                     "sig": sig, "direction": direction, "n_shared": len(e_llm),
                 })
 
+        # ── 2b. Holm-Bonferroni correction within each LLM's family of baseline
+        # comparisons for this metric (same family-wise logic used for the
+        # ablation tests in Section 6: correct across the set of comparisons
+        # sharing a backend and metric).
+        print(f"\n{'─'*90}")
+        print(f" Holm-Bonferroni corrected significance (family = one LLM's baseline comparisons, {metric})")
+        print(f"{'─'*90}")
+        for model_name in sorted(set(r["llm"] for r in sig_results if r["metric"] == metric)):
+            family = [r for r in sig_results if r["metric"] == metric and r["llm"] == model_name]
+            pmins = [min(r["wilcoxon_p"] if not np.isnan(r["wilcoxon_p"]) else 1,
+                         r["dm_p"] if not np.isnan(r["dm_p"]) else 1) for r in family]
+            rejects = holm_bonferroni(pmins)
+            for r, rej in zip(family, rejects):
+                r["holm_reject"] = rej
+            n_sig = sum(rejects)
+            print(f"  {model_name:12s}  {n_sig}/{len(family)} baseline comparisons remain significant after correction: "
+                  + ", ".join(r["baseline"] for r, rej in zip(family, rejects) if rej) if n_sig else
+                  f"  {model_name:12s}  0/{len(family)} baseline comparisons remain significant after correction")
+
+        # ── 2c. LLM vs LLM pairwise significance (all 6 backend pairs), with
+        # Holm-Bonferroni correction across that family of 6 comparisons.
+        print(f"\n{'─'*90}")
+        print(f" Pairwise significance: LLM vs LLM ({metric})")
+        print(f"{'─'*90}")
+        llm_names = sorted(llm_series.keys())
+        llm_pair_results = []
+        for i in range(len(llm_names)):
+            for j in range(i + 1, len(llm_names)):
+                a, b = llm_names[i], llm_names[j]
+                shared = llm_series[a].index.intersection(llm_series[b].index)
+                if len(shared) < 5:
+                    continue
+                e_a = llm_series[a].loc[shared].values.astype(float)
+                e_b = llm_series[b].loc[shared].values.astype(float)
+                valid = ~(np.isnan(e_a) | np.isnan(e_b))
+                e_a, e_b = e_a[valid], e_b[valid]
+                if len(e_a) < 5:
+                    continue
+                w = wilcoxon_test(e_a, e_b)
+                dm = diebold_mariano(e_a, e_b)
+                p_min = min(w["p_value"] if not np.isnan(w["p_value"]) else 1,
+                            dm["p_value"] if not np.isnan(dm["p_value"]) else 1)
+                direction = f"{a}<{b}" if dm["statistic"] < 0 else f"{a}>{b}"
+                llm_pair_results.append({
+                    "metric": metric, "a": a, "b": b,
+                    "wilcoxon_p": w["p_value"], "dm_p": dm["p_value"],
+                    "p_min": p_min, "direction": direction, "n_shared": len(e_a),
+                })
+        rejects = holm_bonferroni([r["p_min"] for r in llm_pair_results])
+        for r, rej in zip(llm_pair_results, rejects):
+            r["holm_reject"] = rej
+            sig = "***" if r["p_min"] < 0.001 else "**" if r["p_min"] < 0.01 else "*" if r["p_min"] < 0.05 else "n.s."
+            print(f"  {r['a']:10s} vs {r['b']:10s}  p_min={r['p_min']:.4f}  {sig:5s}  "
+                  f"holm_reject={rej}  direction={r['direction']}  n={r['n_shared']}")
+        if llm_pair_results:
+            pd.DataFrame(llm_pair_results).to_csv(ROOT / "eval" / f"significance_llm_vs_llm_{metric}.csv", index=False)
+
         # ── 3. LaTeX table rows ───────────────────────────────────────────────
         print(f"\n{'─'*90}")
         print(f" LaTeX-ready comparison table rows ({metric})")
@@ -292,7 +364,8 @@ def run_full_analysis():
                      if b in ci_results]
         # header
         bl_labels = {"persistence":"Persistence","seasonal_naive":"Seasonal Naive",
-                     "sarima":"SARIMA","chronos":"Chronos","tft":"TFT"}
+                     "sarima":"SARIMA","chronos":"Chronos","tft":"TFT",
+                     "timesfm":"TimesFM","moirai":"Moirai"}
         header_cols = " & ".join(f"\\textbf{{{bl_labels.get(b, b)}}}" for b in bl_order)
         print(f"  Method & {header_cols} \\\\")
         print(f"  \\midrule")

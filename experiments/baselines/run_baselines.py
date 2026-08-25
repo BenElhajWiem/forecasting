@@ -144,8 +144,9 @@ def main() -> int:
     results_df.to_csv(args.output, index=False)
     print(f"Results saved to {args.output}")
 
-    # Print summary metrics
-    summary = compute_baseline_metrics(results_df)
+    # Print summary metrics (stratified by horizon to surface horizon-dependent
+    # degradation, e.g. for SARIMA under the fixed-origin evaluation protocol)
+    summary = compute_baseline_metrics(results_df, by_horizon=True)
     if not summary.empty:
         print("\n=== Baseline Summary Metrics ===")
         print(summary.to_string(index=False))

@@ -135,17 +135,41 @@ class SARIMAConfig:
     order: Tuple[int, int, int] = (1, 1, 1)
     seasonal_order: Tuple[int, int, int, int] = (1, 1, 0, 48)  # 48 half-hours per day
     resample_freq: str = "30min"
-    max_train_rows: int = 4 * 48 * 7  # 4 weeks of half-hourly data
+    # Revision note (2026-08, Reviewer #2): was 4*48*7 (4 weeks). Widened to 26 weeks
+    # (~6 months) of pre-cutoff history -- diagnostic runs against the real AEMO data
+    # show this does NOT fix the poor long-horizon SARIMA performance Reviewer #2
+    # flagged (a fresh 26-week fit predicted 20723.66 MW for a query where the
+    # original 4-week fit predicted 20452.57 MW against a ground truth of 9207.15 --
+    # nearly identical, both far off). The root cause is structural, not a training-
+    # data-volume artifact: under this evaluation's fixed-origin protocol (Sec. 5.3),
+    # every query -- including ones labeled "short_term" in the query semantics --
+    # is forecast from the same frozen anchor t_max, which can be hundreds to
+    # thousands of 30-minute steps before the target (e.g. "short_term_NSW1_001" is
+    # 2400 steps / 50 days ahead of t_max). A (1,1,x)x(1,1,0,48) SARIMA's double
+    # differencing compounds trend/seasonal drift additively over that many steps,
+    # regardless of how much history it was fit on. The widened window is kept as a
+    # modest, still-tractable improvement (better seasonal coverage, ~1min/series fit
+    # on the real data) but is not a fix for the long-horizon degradation itself --
+    # see the paper's Evaluation Protocol and Limitations sections for the honest
+    # explanation and the horizon-stratified reporting (compute_baseline_metrics
+    # by_horizon=True) this motivates instead.
+    max_train_rows: int = 26 * 48 * 7  # 26 weeks of half-hourly data
 
 
-def sarima_predict(
+def sarima_fit(
     series: pd.Series,
-    target_timestamps: List[pd.Timestamp],
     cfg: SARIMAConfig = SARIMAConfig(),
-) -> Dict[pd.Timestamp, float]:
+):
     """
-    Fit a SARIMA model on the most recent *max_train_rows* observations and
-    forecast forward to each target timestamp.
+    Fit a SARIMA model on the most recent *max_train_rows* observations of *series*.
+
+    Split out from prediction so callers evaluating multiple queries against the
+    same underlying (region, metric) series can fit once and reuse the fitted
+    result across queries, instead of refitting per query (~40s/fit on the real
+    AEMO series at the current 26-week training window -- refitting per query
+    instead of per series turns a ~10-fit run into a ~25-fit run).
+
+    Returns (result, last_train_ts) or (None, None) if fitting fails / insufficient data.
 
     Requires: statsmodels >= 0.13
     """
@@ -154,15 +178,11 @@ def sarima_predict(
     except ImportError as e:
         raise ImportError("statsmodels is required for SARIMA: pip install statsmodels") from e
 
-    # Resample to regular grid
     resampled = series.resample(cfg.resample_freq).mean().interpolate(method="time")
     train = resampled.tail(cfg.max_train_rows).dropna()
 
     if len(train) < cfg.seasonal_order[3] * 2:
-        return {ts: np.nan for ts in target_timestamps}
-
-    preds: Dict[pd.Timestamp, float] = {}
-    last_train_ts = train.index[-1]
+        return None, None
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -176,8 +196,22 @@ def sarima_predict(
             )
             result = model.fit(disp=False, maxiter=50)
         except Exception:
-            return {ts: np.nan for ts in target_timestamps}
+            return None, None
 
+    return result, train.index[-1]
+
+
+def sarima_predict_from_fit(
+    result,
+    last_train_ts: Optional[pd.Timestamp],
+    target_timestamps: List[pd.Timestamp],
+    cfg: SARIMAConfig = SARIMAConfig(),
+) -> Dict[pd.Timestamp, float]:
+    """Forecast *target_timestamps* from an already-fitted SARIMA result (see sarima_fit)."""
+    if result is None:
+        return {ts: np.nan for ts in target_timestamps}
+
+    preds: Dict[pd.Timestamp, float] = {}
     for ts in target_timestamps:
         if ts <= last_train_ts:
             # Target is within training window — use in-sample fitted value
@@ -197,6 +231,220 @@ def sarima_predict(
             except Exception:
                 preds[ts] = np.nan
 
+    return preds
+
+
+def sarima_predict(
+    series: pd.Series,
+    target_timestamps: List[pd.Timestamp],
+    cfg: SARIMAConfig = SARIMAConfig(),
+) -> Dict[pd.Timestamp, float]:
+    """
+    Fit a SARIMA model on the most recent *max_train_rows* observations and
+    forecast forward to each target timestamp.
+
+    For evaluating multiple queries against the same series, prefer calling
+    sarima_fit() once and sarima_predict_from_fit() per query instead — see
+    run_all_baselines() for the caching pattern this function does not do.
+    """
+    result, last_train_ts = sarima_fit(series, cfg)
+    return sarima_predict_from_fit(result, last_train_ts, target_timestamps, cfg)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ETS (Holt-Winters exponential smoothing) baseline
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ETSConfig:
+    trend: str = "add"
+    seasonal: str = "add"
+    seasonal_periods: int = 48  # 48 half-hours per day, matching SARIMA's s=48
+    resample_freq: str = "30min"
+    max_train_rows: int = 26 * 48 * 7  # same 26-week window as SARIMA, for comparability
+
+
+def ets_fit(series: pd.Series, cfg: ETSConfig = ETSConfig()):
+    """Fit Holt-Winters exponential smoothing on the most recent max_train_rows observations."""
+    from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+    resampled = series.resample(cfg.resample_freq).mean().interpolate(method="time")
+    train = resampled.tail(cfg.max_train_rows).dropna()
+
+    if len(train) < cfg.seasonal_periods * 2:
+        return None, None
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            model = ExponentialSmoothing(
+                train,
+                trend=cfg.trend,
+                seasonal=cfg.seasonal,
+                seasonal_periods=cfg.seasonal_periods,
+                initialization_method="estimated",
+            )
+            result = model.fit()
+        except Exception:
+            return None, None
+
+    return result, train.index[-1]
+
+
+def ets_predict_from_fit(
+    result,
+    last_train_ts: Optional[pd.Timestamp],
+    target_timestamps: List[pd.Timestamp],
+    cfg: ETSConfig = ETSConfig(),
+) -> Dict[pd.Timestamp, float]:
+    if result is None:
+        return {ts: np.nan for ts in target_timestamps}
+
+    preds: Dict[pd.Timestamp, float] = {}
+    for ts in target_timestamps:
+        if ts <= last_train_ts:
+            if ts in result.fittedvalues.index:
+                preds[ts] = float(result.fittedvalues[ts])
+            else:
+                nearest = result.fittedvalues.index.get_indexer([ts], method="nearest")[0]
+                preds[ts] = float(result.fittedvalues.iloc[nearest])
+        else:
+            steps = int((ts - last_train_ts) / pd.Timedelta(cfg.resample_freq))
+            if steps < 1:
+                steps = 1
+            try:
+                fc = result.forecast(steps=steps)
+                preds[ts] = float(fc.iloc[-1])
+            except Exception:
+                preds[ts] = np.nan
+    return preds
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Theta method baseline
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ThetaConfig:
+    period: int = 48  # 48 half-hours per day, matching SARIMA's s=48
+    resample_freq: str = "30min"
+    max_train_rows: int = 26 * 48 * 7  # same 26-week window as SARIMA, for comparability
+    deseasonalize: bool = True
+
+
+def theta_fit(series: pd.Series, cfg: ThetaConfig = ThetaConfig()):
+    """Fit the Theta method (Assimakopoulos & Nikolopoulos, 2000) via statsmodels' ThetaModel."""
+    from statsmodels.tsa.forecasting.theta import ThetaModel
+
+    resampled = series.resample(cfg.resample_freq).mean().interpolate(method="time")
+    train = resampled.tail(cfg.max_train_rows).dropna()
+
+    if len(train) < cfg.period * 2:
+        return None, None
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            model = ThetaModel(train, period=cfg.period, deseasonalize=cfg.deseasonalize)
+            result = model.fit()
+        except Exception:
+            return None, None
+
+    return result, train.index[-1]
+
+
+def theta_predict_from_fit(
+    result,
+    last_train_ts: Optional[pd.Timestamp],
+    target_timestamps: List[pd.Timestamp],
+    cfg: ThetaConfig = ThetaConfig(),
+) -> Dict[pd.Timestamp, float]:
+    if result is None:
+        return {ts: np.nan for ts in target_timestamps}
+
+    preds: Dict[pd.Timestamp, float] = {}
+    # Group by required forecast horizon (in steps) since ThetaModel's forecast()
+    # returns the whole path 1..steps and we just need the value at each target.
+    for ts in target_timestamps:
+        steps = int((ts - last_train_ts) / pd.Timedelta(cfg.resample_freq))
+        if steps < 1:
+            steps = 1
+        try:
+            fc = result.forecast(steps=steps)
+            preds[ts] = float(fc.iloc[-1])
+        except Exception:
+            preds[ts] = np.nan
+    return preds
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prophet baseline
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ProphetConfig:
+    resample_freq: str = "30min"
+    max_train_rows: int = 26 * 48 * 7  # same 26-week window as SARIMA, for comparability
+    daily_seasonality: bool = True
+    weekly_seasonality: bool = True
+    yearly_seasonality: bool = False
+
+
+def prophet_fit(series: pd.Series, cfg: ProphetConfig = ProphetConfig()):
+    """Fit Facebook/Meta Prophet on the most recent max_train_rows observations."""
+    try:
+        from prophet import Prophet
+    except ImportError as e:
+        raise ImportError("prophet is required: pip install prophet") from e
+
+    resampled = series.resample(cfg.resample_freq).mean().interpolate(method="time")
+    train = resampled.tail(cfg.max_train_rows).dropna()
+
+    if len(train) < 48 * 2:
+        return None, None
+
+    df = pd.DataFrame({
+        "ds": train.index.tz_localize(None),
+        "y": train.values,
+    })
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            model = Prophet(
+                daily_seasonality=cfg.daily_seasonality,
+                weekly_seasonality=cfg.weekly_seasonality,
+                yearly_seasonality=cfg.yearly_seasonality,
+            )
+            model.fit(df)
+        except Exception:
+            return None, None
+
+    return model, train.index[-1]
+
+
+def prophet_predict_from_fit(
+    model,
+    last_train_ts: Optional[pd.Timestamp],
+    target_timestamps: List[pd.Timestamp],
+    cfg: ProphetConfig = ProphetConfig(),
+) -> Dict[pd.Timestamp, float]:
+    if model is None:
+        return {ts: np.nan for ts in target_timestamps}
+
+    tz = target_timestamps[0].tzinfo if target_timestamps else None
+    naive_targets = [ts.tz_localize(None) if ts.tzinfo is not None else ts for ts in target_timestamps]
+    future = pd.DataFrame({"ds": naive_targets})
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            fc = model.predict(future)
+        preds = {
+            ts: float(val)
+            for ts, val in zip(target_timestamps, fc["yhat"].values)
+        }
+    except Exception:
+        preds = {ts: np.nan for ts in target_timestamps}
     return preds
 
 
@@ -242,6 +490,18 @@ def run_all_baselines(
                 series_cache[key] = pd.Series(dtype=float)
         return series_cache[key]
 
+    # Cache the fitted SARIMA model per (region, metric): fitting is ~40s/series
+    # and depends only on the series + config, not on any individual query's
+    # target timestamps, so it must be fit once per series and reused across
+    # every query that targets that (region, metric) — not refit per query.
+    sarima_fit_cache: Dict[Tuple[str, str], Tuple] = {}
+
+    def get_sarima_fit(region: str, metric: str, series: pd.Series):
+        key = (region.upper(), metric)
+        if key not in sarima_fit_cache:
+            sarima_fit_cache[key] = sarima_fit(series, cfg.sarima_cfg)
+        return sarima_fit_cache[key]
+
     for q in queries:
         qid = q.get("id", "")
         region = q.get("region", "")
@@ -250,12 +510,16 @@ def run_all_baselines(
 
         # Resolve target timestamps
         raw_ts = q.get("target_timestamps") or q.get("timestamp") or q.get("start_timestamp")
-        if isinstance(raw_ts, list):
-            target_tss = [pd.Timestamp(t).tz_localize(cfg.tz) if pd.Timestamp(t).tzinfo is None else pd.Timestamp(t) for t in raw_ts]
-        elif raw_ts:
-            ts = pd.Timestamp(raw_ts)
-            target_tss = [ts.tz_localize(cfg.tz) if ts.tzinfo is None else ts]
-        else:
+        if not raw_ts:
+            continue
+        try:
+            if isinstance(raw_ts, list):
+                target_tss = [pd.Timestamp(t).tz_localize(cfg.tz) if pd.Timestamp(t).tzinfo is None else pd.Timestamp(t) for t in raw_ts]
+            else:
+                ts = pd.Timestamp(raw_ts)
+                target_tss = [ts.tz_localize(cfg.tz) if ts.tzinfo is None else ts]
+        except (ValueError, TypeError) as exc:
+            warnings.warn(f"Skipping query {qid!r}: could not parse timestamp {raw_ts!r} ({exc})")
             continue
 
         gt_map: Dict = q.get("ground_truth", {})
@@ -267,9 +531,11 @@ def run_all_baselines(
 
             p_preds = persistence_predict(series, target_tss)
             sn_preds = seasonal_naive_predict(series, target_tss, horizon_hint)
-            sa_preds = (
-                sarima_predict(series, target_tss, cfg.sarima_cfg) if cfg.run_sarima else {}
-            )
+            if cfg.run_sarima:
+                fit_result, last_train_ts = get_sarima_fit(region, metric, series)
+                sa_preds = sarima_predict_from_fit(fit_result, last_train_ts, target_tss, cfg.sarima_cfg)
+            else:
+                sa_preds = {}
 
             for ts in target_tss:
                 ts_str = ts.isoformat()
@@ -301,16 +567,24 @@ def run_all_baselines(
     return pd.DataFrame(rows)
 
 
-def compute_baseline_metrics(df: pd.DataFrame) -> pd.DataFrame:
+def compute_baseline_metrics(df: pd.DataFrame, by_horizon: bool = False) -> pd.DataFrame:
     """
     Compute MAE and RMSE for each baseline method over rows where ground_truth is available.
-    Returns a summary DataFrame with columns: method, metric, MAE, RMSE, n.
+
+    Args:
+        by_horizon: if True, also stratify by `horizon_hint` (short_term/mid_term/long_term)
+            in addition to the aggregate row. This surfaces horizon-dependent degradation
+            (e.g. SARIMA's known weakness at long multi-step horizons under a fixed-origin
+            evaluation protocol) rather than hiding it behind a single aggregate number.
+
+    Returns a summary DataFrame with columns: method, metric, horizon, MAE, RMSE, n.
+    `horizon` is "all" for the aggregate row.
     """
     methods = ["persistence", "seasonal_naive", "sarima"]
-    records = []
-    for metric in df["metric"].unique():
-        sub = df[df["metric"] == metric].dropna(subset=["ground_truth"])
+
+    def _rows_for(sub: pd.DataFrame, metric: str, horizon: str) -> list[dict]:
         gt = pd.to_numeric(sub["ground_truth"], errors="coerce")
+        out = []
         for method in methods:
             if method not in sub.columns:
                 continue
@@ -319,11 +593,21 @@ def compute_baseline_metrics(df: pd.DataFrame) -> pd.DataFrame:
             if valid.sum() == 0:
                 continue
             errors = (gt[valid] - pred[valid]).abs()
-            records.append({
+            out.append({
                 "method": method,
                 "metric": metric,
+                "horizon": horizon,
                 "MAE": float(errors.mean()),
                 "RMSE": float(np.sqrt((errors**2).mean())),
                 "n": int(valid.sum()),
             })
+        return out
+
+    records = []
+    for metric in df["metric"].unique():
+        sub = df[df["metric"] == metric].dropna(subset=["ground_truth"])
+        records.extend(_rows_for(sub, metric, "all"))
+        if by_horizon and "horizon_hint" in sub.columns:
+            for horizon, hsub in sub.groupby("horizon_hint"):
+                records.extend(_rows_for(hsub, metric, horizon))
     return pd.DataFrame(records)
