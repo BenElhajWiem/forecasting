@@ -1,15 +1,3 @@
-# Cost estimation utilities for LLM API calls.
-#
-# NOTE (revision, 2026-08): the gemini-2.5-flash input rate below was 0.025/1k
-# (~$25 per 1M tokens) -- about 80x the published rate and higher than its own
-# output rate, which is backwards for every major provider. Corrected against
-# Google's published Gemini 2.5 Flash pricing ($0.30/1M input, $2.50/1M output;
-# ai.google.dev/gemini-api/docs/pricing, checked 2026-08-04). This is very
-# likely the root cause of the inflated per-run cost Reviewer #3 flagged
-# (Gemini $15.63/run vs Claude $4.16/run). Only the Gemini rate is changed
-# here -- the other three providers' rates were not flagged as anomalous and
-# are left as originally recorded.
-
 PRICES = {
     "gpt-4o-mini":       {"input_per_1k": 0.00015,   "output_per_1k": 0.00066},
     "deepseek-chat":     {"input_per_1k": 0.00028,   "output_per_1k": 0.00028},  # placeholder

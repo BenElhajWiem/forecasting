@@ -1,29 +1,3 @@
-"""
-Automated groundedness metric for forecast rationales.
-
-Motivation (EAAI-26-14664 revision, Reviewer #4.3): "Explainability claims
-are evaluated qualitatively only. A quantitative evaluation or expert
-assessment is needed." This provides a quantitative, automated proxy:
-for each generated forecast, what fraction of the numeric values cited in
-its rationale (`answer`) are traceable to the statistical/pattern evidence
-the pipeline actually retrieved and computed upstream (StatisticalAgent /
-pattern_detection, logged in each run's trace file), versus untethered
-numbers with no matching evidence value.
-
-This is a TRACEABILITY metric, not a correctness metric: a "grounded" number
-is one that matches a value the pipeline actually computed, independent of
-whether that was the statistically "right" number to cite. It directly
-operationalizes the paper's traceability claim (Introduction, Proposed
-System) rather than leaving it as a qualitative/structural assertion.
-
-Data source: experiments/outputs/<Backend>/<batch>/<exp_id>/results.jsonl,
-matched to their trace file by run_id (not by the `trace_path` field logged
-in results.jsonl, which was found to record an inconsistent/incorrect batch
-label -- see note in main()).
-
-Usage:
-    python -m experiments.eval.groundedness
-"""
 from __future__ import annotations
 
 import glob

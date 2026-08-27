@@ -1,22 +1,3 @@
-"""
-Recompute per-run cost, latency, and API-call-count statistics from the raw
-experiment logs (experiments/outputs/<Backend>/<batch>/<exp_id>/{results.jsonl,calls/}),
-using the corrected pricing table in experiments/utils/cost.py.
-
-Motivation (EAAI-26-14664 revision):
-  - Reviewer #3 flagged Gemini 2.5 Flash's per-run cost ($15.63) as implausibly
-    high relative to Claude Sonnet 4.5 ($4.16) -- more than 10x.
-  - Reviewer #2 asked for the number of API calls per run and their variance,
-    which the paper did not report.
-  - experiments/utils/cost.py had a pricing bug: gemini-2.5-flash input was
-    priced at $25/1M tokens instead of the published $0.30/1M (see the NOTE in
-    that file). tokens_in/tokens_out logged per call are unaffected by the
-    bug -- only the derived cost_usd was wrong -- so costs can be recomputed
-    exactly from the raw token counts already on disk.
-
-This script does not call any API or modify the raw logs; it only re-derives
-cost_usd from tokens_in/tokens_out and reports summary statistics.
-"""
 from __future__ import annotations
 
 import json

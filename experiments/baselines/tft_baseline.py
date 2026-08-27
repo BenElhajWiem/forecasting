@@ -1,16 +1,3 @@
-"""
-Temporal Fusion Transformer (TFT) baseline for AEMO electricity forecasting.
-
-Trains on pre-cutoff AEMO data (TOTALDEMAND + RRP, all 5 regions) using
-pytorch-forecasting, then forecasts each query target.
-
-Strategy:
-  - Training window: last 90 days before cutoff (to keep training feasible)
-  - Encoder length: 168 steps (3.5 days of 30-min data)
-  - Prediction length: 1 (point forecast at target timestamp)
-  - For targets far beyond cutoff: iterative 1-step-ahead rollout
-  - One model per metric (TD / RRP) across all regions (region = static categorical)
-"""
 from __future__ import annotations
 
 import warnings

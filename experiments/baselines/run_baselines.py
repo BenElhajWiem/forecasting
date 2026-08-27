@@ -1,13 +1,6 @@
 """
 Run all classical baselines against the evaluation query set and produce
 a results CSV.
-
-Usage:
-    python -m experiments.baselines.run_baselines \
-        --csv data/processed_data.csv \
-        --queries experiments/queries/queries_verif_25.json \
-        --output experiments/baselines/baseline_results.csv \
-        [--no-sarima]
 """
 from __future__ import annotations
 

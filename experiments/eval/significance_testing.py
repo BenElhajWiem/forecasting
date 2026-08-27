@@ -1,22 +1,3 @@
-"""
-Statistical significance testing for forecast comparison.
-
-Implements:
-  1. Bootstrap confidence intervals for MAE and RMSE
-  2. Wilcoxon signed-rank test for pairwise model comparison
-  3. Diebold-Mariano test for forecast accuracy comparison
-  4. Summary tables suitable for paper reporting
-
-Usage (standalone):
-    python -m experiments.eval.significance_testing \
-        --inputs Claude_eval_with_gt.csv Gemini_eval_with_gt.csv ... \
-        --stage reproducibility \
-        --output significance_results/
-
-Usage (as library):
-    from experiments.eval.significance_testing import run_significance_analysis
-    results = run_significance_analysis(model_dfs, metric="TOTALDEMAND")
-"""
 from __future__ import annotations
 
 import ast

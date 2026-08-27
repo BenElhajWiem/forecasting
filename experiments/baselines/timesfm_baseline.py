@@ -1,28 +1,8 @@
-"""
-TimesFM (Google, zero-shot) baseline for AEMO electricity forecasting.
-
-Motivation (EAAI-26-14664 revision, Reviewer #4.2): the paper previously
-compared only against classical statistical baselines (Persistence, Seasonal
-Naive, SARIMA) and one time series foundation model (Chronos). This adds a
-second, architecturally distinct zero-shot TSFM explicitly named by the
-reviewer, without any training.
-
-Runs in the isolated `tsfm_env` venv (Python >=3.10 required by timesfm;
-the main project venv is Python 3.9) -- see README note in that directory.
-Data loading mirrors tft_baseline.py's convention (same cutoff, same
-fixed-origin protocol per the paper's Evaluation Protocol, Sec 5.3) but is
-duplicated rather than imported because tft_baseline.py's other imports
-(pytorch_forecasting, lightning) are not installed in tsfm_env.
-
-Usage:
-    source tsfm_env/bin/activate
-    python -m experiments.baselines.timesfm_baseline
-"""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import timesfm
+import timesfm  # pyright: ignore[reportMissingImports]  # runs in tsfm_env, not the main venv
 
 CSV_PATH = "data/processed_data.csv"
 CUTOFF = "2025-04-30 23:30:00"

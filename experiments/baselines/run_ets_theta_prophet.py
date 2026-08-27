@@ -1,16 +1,3 @@
-"""
-Run ETS, Theta, and Prophet baselines against the exact same rows already
-present in experiments/baselines/baseline_results.csv (same query_id, region,
-metric, target_ts, ground_truth as every other baseline in the paper), and
-add three new prediction columns (ets, theta, prophet) to that file.
-
-Fitting is cached per (region, metric) series, same pattern as SARIMA in
-classical_baselines.py, since fitting is independent of which query targets
-that series.
-
-Usage:
-    python -m experiments.baselines.run_ets_theta_prophet
-"""
 from __future__ import annotations
 
 import os

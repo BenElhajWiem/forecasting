@@ -1,30 +1,11 @@
-"""
-Moirai (Salesforce, zero-shot) baseline for AEMO electricity forecasting.
-
-Motivation (EAAI-26-14664 revision, Reviewer #4.2): a second zero-shot time
-series foundation model, architecturally distinct from both Chronos
-(already in the paper) and TimesFM (experiments/baselines/timesfm_baseline.py),
-explicitly named by the reviewer. No training.
-
-Runs in the isolated `tsfm_env` venv (Python >=3.10 required by uni2ts; the
-main project venv is Python 3.9). Data loading duplicates
-timesfm_baseline.py's loader rather than importing it, kept self-contained
-per baseline script (each of these small loaders is ~15 lines; consolidating
-them is tracked separately, see experiments/eval/ dedup notes).
-
-Usage:
-    source tsfm_env/bin/activate
-    python -m experiments.baselines.moirai_baseline
-"""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 import torch
-from gluonts.dataset.pandas import PandasDataset
+from gluonts.dataset.pandas import PandasDataset  # pyright: ignore[reportMissingImports]
 
-from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
-
+from uni2ts.model.moirai import MoiraiForecast, MoiraiModule  # pyright: ignore[reportMissingImports]  # runs in tsfm_env, not the main venv
 CSV_PATH = "data/processed_data.csv"
 CUTOFF = "2025-04-30 23:30:00"
 TZ = "Australia/Sydney"

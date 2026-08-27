@@ -1,21 +1,3 @@
-"""
-Prompt-only LLM baseline: sends each evaluation query as a single,
-unscaffolded prompt directly to the model (no retrieval, no statistical
-grounding, no summarization, no pattern detection, no output-format
-constraints, no few-shot exemplars) and checks whether a numeric forecast
-for each requested metric can be recovered by the SAME parser used
-throughout the evaluation framework (experiments/eval/significance_testing.py).
-
-This quantifies the "responses frequently contained malformed or unusable
-outputs" claim in the paper (Section 6, Prompt-Only Evaluation) with real
-per-backend counts instead of qualitative language.
-
-Usage:
-    python -m experiments.baselines.prompt_only_baseline \
-        --queries experiments/queries/queries_eval_25.json \
-        --backends openai-mini deepseek-chat \
-        --output experiments/baselines/prompt_only_results.csv
-"""
 from __future__ import annotations
 
 import argparse

@@ -1,18 +1,3 @@
-"""
-Manual test harness for the Verification Agent feedback loop (R3.1 revision).
-
-Runs a handful of real queries from the eval query set through the
-orchestration pipeline with enable_verification=True, and prints the
-Verification Agent's judgement at each revision attempt so you can eyeball
-whether it's catching real inconsistencies or just adding noise before
-deciding whether to fold it into the evaluation.
-
-This does NOT modify default behaviour: orchestration_agent(..., enable_verification=False)
-(the default) is untouched by this change.
-
-Usage:
-    python -m experiments.scripts.test_verification --preset deepseek-chat --n 3
-"""
 from __future__ import annotations
 
 import argparse
