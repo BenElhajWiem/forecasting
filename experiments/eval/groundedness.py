@@ -19,12 +19,7 @@ _NUM_RE = re.compile(r"-?\d[\d,]*\.?\d*")
 
 def _numbers_in_text(text: str) -> list[float]:
     """Extract candidate numeric claims from a forecast rationale.
-
-    Skips small bare integers (years like 2024, counts like "5-year",
-    percentages under 1 written as whole numbers) which are common but
-    uninformative as "cited evidence" -- keeping them would inflate both
-    the match and mismatch counts with numbers nobody intends as evidence.
-    """
+    This is a simple regex-based approach that looks for numbers in the text, and filters out"""
     out = []
     for m in _NUM_RE.finditer(text or ""):
         s = m.group().replace(",", "")

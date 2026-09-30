@@ -34,7 +34,7 @@ class PatternConfig:
 @dataclass
 class LLMConfig:
     model: str = None
-    temperature: float = 0.2
+    temperature: float = 0.0
     max_tokens_out: int = None
     json_mode: bool = True              # we want JSON labels back
     model_override: Optional[str] = None

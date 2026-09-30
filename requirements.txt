@@ -7,6 +7,7 @@ blinker==1.9.0
 cachetools==6.2.1
 certifi==2025.8.3
 charset-normalizer==3.4.4
+chronos-forecasting==1.5.3
 click==8.1.8
 distro==1.9.0
 exceptiongroup==1.3.0
@@ -43,6 +44,7 @@ openai==2.0.1
 packaging==25.0
 pandas==2.3.3
 pillow==11.3.0
+prophet==1.3.0
 proto-plus==1.26.1
 protobuf==5.29.5
 pyarrow==21.0.0
@@ -54,6 +56,7 @@ pydeck==0.9.1
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
+pytorch-forecasting==1.4.0
 pytz==2025.2
 PyYAML==6.0.3
 referencing==0.36.2
