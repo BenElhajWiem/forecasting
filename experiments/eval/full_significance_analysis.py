@@ -188,6 +188,29 @@ def diebold_mariano(e1: np.ndarray, e2: np.ndarray, h: int = 1) -> dict:
     return {"statistic": float(dm), "p_value": float(p), "n": int(n)}
 
 
+def load_query_timestamps() -> dict[str, str]:
+    """Target timestamp of each query, used to order paired errors in time
+    before the Newey-West variance of the Diebold-Mariano test."""
+    ts: dict[str, str] = {}
+    for csv_path in sorted(EVAL_DIR.glob("*_eval_with_gt.csv")):
+        df = pd.read_csv(csv_path)
+        for _, row in df.iterrows():
+            ts.setdefault(str(row.get("query_id")), str(row.get("timestamp")))
+    return ts
+
+
+def time_ordered(shared: pd.Index, ts: dict[str, str]) -> pd.Index:
+    return pd.Index(sorted(shared, key=lambda q: ts.get(str(q), "")))
+
+
+def combined_p(w_p: float, dm_p: float) -> float:
+    """Twice the smaller of the Wilcoxon and Diebold-Mariano p-values
+    (Bonferroni adjustment for using two tests), capped at 1."""
+    w_p = 1.0 if np.isnan(w_p) else w_p
+    dm_p = 1.0 if np.isnan(dm_p) else dm_p
+    return min(1.0, 2.0 * min(w_p, dm_p))
+
+
 def holm_bonferroni(pvals: list[float]) -> list[bool]:
     """Returns per-test reject-null flags at alpha=0.05, Holm step-down procedure."""
     m = len(pvals)
@@ -227,6 +250,7 @@ def run_full_analysis():
         llm_flat   = load_llm_errors(metric)
         llm_series = load_llm_errors_by_query(metric)
         bl_series  = load_baseline_errors(metric)
+        query_ts   = load_query_timestamps()
 
         # ── 1. Bootstrap CIs for every method ────────────────────────────────
         print(f"\n{'─'*90}")
@@ -265,7 +289,7 @@ def run_full_analysis():
         sig_results = []
         for model_name, model_ser in sorted(llm_series.items()):
             for bl_name, bl_ser in sorted(bl_series.items()):
-                shared = model_ser.index.intersection(bl_ser.index)
+                shared = time_ordered(model_ser.index.intersection(bl_ser.index), query_ts)
                 if len(shared) < 5:
                     continue
                 e_llm = model_ser.loc[shared].values.astype(float)
@@ -278,11 +302,8 @@ def run_full_analysis():
                 w  = wilcoxon_test(e_llm, e_bl)
                 dm = diebold_mariano(e_llm, e_bl)
 
-                p_min = min(
-                    w["p_value"]  if not np.isnan(w["p_value"])  else 1,
-                    dm["p_value"] if not np.isnan(dm["p_value"]) else 1,
-                )
-                sig = "***" if p_min < 0.001 else "**" if p_min < 0.01 else "*" if p_min < 0.05 else "n.s."
+                p_comb = combined_p(w["p_value"], dm["p_value"])
+                sig = "***" if p_comb < 0.001 else "**" if p_comb < 0.01 else "*" if p_comb < 0.05 else "n.s."
 
                 # direction: negative DM → LLM better; positive → baseline better
                 direction = "LLM<BL" if dm["statistic"] < 0 else "LLM>BL"
@@ -295,7 +316,7 @@ def run_full_analysis():
                     "bl_mae":  ci_results.get(bl_name, (np.nan,))[0],
                     "wilcoxon_stat": w["statistic"], "wilcoxon_p": w["p_value"],
                     "dm_stat": dm["statistic"], "dm_p": dm["p_value"],
-                    "sig": sig, "direction": direction, "n_shared": len(e_llm),
+                    "p_combined": p_comb, "sig": sig, "direction": direction, "n_shared": len(e_llm),
                 })
 
         # ── 2b. Holm-Bonferroni correction within each LLM's family of baseline
@@ -307,9 +328,7 @@ def run_full_analysis():
         print(f"{'─'*90}")
         for model_name in sorted(set(r["llm"] for r in sig_results if r["metric"] == metric)):
             family = [r for r in sig_results if r["metric"] == metric and r["llm"] == model_name]
-            pmins = [min(r["wilcoxon_p"] if not np.isnan(r["wilcoxon_p"]) else 1,
-                         r["dm_p"] if not np.isnan(r["dm_p"]) else 1) for r in family]
-            rejects = holm_bonferroni(pmins)
+            rejects = holm_bonferroni([r["p_combined"] for r in family])
             for r, rej in zip(family, rejects):
                 r["holm_reject"] = rej
             n_sig = sum(rejects)
@@ -327,7 +346,7 @@ def run_full_analysis():
         for i in range(len(llm_names)):
             for j in range(i + 1, len(llm_names)):
                 a, b = llm_names[i], llm_names[j]
-                shared = llm_series[a].index.intersection(llm_series[b].index)
+                shared = time_ordered(llm_series[a].index.intersection(llm_series[b].index), query_ts)
                 if len(shared) < 5:
                     continue
                 e_a = llm_series[a].loc[shared].values.astype(float)
@@ -338,19 +357,18 @@ def run_full_analysis():
                     continue
                 w = wilcoxon_test(e_a, e_b)
                 dm = diebold_mariano(e_a, e_b)
-                p_min = min(w["p_value"] if not np.isnan(w["p_value"]) else 1,
-                            dm["p_value"] if not np.isnan(dm["p_value"]) else 1)
+                p_comb = combined_p(w["p_value"], dm["p_value"])
                 direction = f"{a}<{b}" if dm["statistic"] < 0 else f"{a}>{b}"
                 llm_pair_results.append({
                     "metric": metric, "a": a, "b": b,
                     "wilcoxon_p": w["p_value"], "dm_p": dm["p_value"],
-                    "p_min": p_min, "direction": direction, "n_shared": len(e_a),
+                    "p_combined": p_comb, "direction": direction, "n_shared": len(e_a),
                 })
-        rejects = holm_bonferroni([r["p_min"] for r in llm_pair_results])
+        rejects = holm_bonferroni([r["p_combined"] for r in llm_pair_results])
         for r, rej in zip(llm_pair_results, rejects):
             r["holm_reject"] = rej
-            sig = "***" if r["p_min"] < 0.001 else "**" if r["p_min"] < 0.01 else "*" if r["p_min"] < 0.05 else "n.s."
-            print(f"  {r['a']:10s} vs {r['b']:10s}  p_min={r['p_min']:.4f}  {sig:5s}  "
+            sig = "***" if r["p_combined"] < 0.001 else "**" if r["p_combined"] < 0.01 else "*" if r["p_combined"] < 0.05 else "n.s."
+            print(f"  {r['a']:10s} vs {r['b']:10s}  p_combined={r['p_combined']:.4f}  {sig:5s}  "
                   f"holm_reject={rej}  direction={r['direction']}  n={r['n_shared']}")
         if llm_pair_results:
             pd.DataFrame(llm_pair_results).to_csv(ROOT / "eval" / f"significance_llm_vs_llm_{metric}.csv", index=False)
@@ -380,8 +398,7 @@ def run_full_analysis():
                          if r["metric"]==metric and r["llm"]==m_name and r["baseline"]==bl_name]
                 if match:
                     r = match[0]
-                    p = min(r["wilcoxon_p"] if not np.isnan(r["wilcoxon_p"]) else 1,
-                            r["dm_p"]       if not np.isnan(r["dm_p"])       else 1)
+                    p = r["p_combined"]
                     star = "^{***}" if p < 0.001 else "^{**}" if p < 0.01 else "^{*}" if p < 0.05 else ""
                     bl_mae, bl_lo, bl_hi, _ = ci_results.get(bl_name, (np.nan, np.nan, np.nan, 0))
                     cells.append(f"${star}$" if star else "$-$")

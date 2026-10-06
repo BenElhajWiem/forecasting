@@ -34,6 +34,9 @@ experiments/outputs/OpenAI/4_Ablation_OpenAI
 experiments/outputs/OpenAI/5_Ablation_OpenAI
 
 experiments/outputs/Claude/1_Ablation_Claude
+experiments/outputs/Claude/2_Ablation_Claude
+experiments/outputs/Claude/3_Ablation_Claude
+experiments/outputs/Claude/4_Ablation_Claude
 experiments/outputs/Claude/5_Ablation_Claude
 
 experiments/queries/rest.json
